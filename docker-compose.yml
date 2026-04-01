@@ -1,0 +1,15 @@
+services:
+  mealplanner:
+    build: .
+    ports:
+      - "5001:5001"
+    volumes:
+      - mealplanner-data:/data
+    env_file:
+      - .env
+    environment:
+      - DATABASE_PATH=/data/mealplanner.db
+    restart: unless-stopped
+
+volumes:
+  mealplanner-data:

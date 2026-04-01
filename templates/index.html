@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meal Planner</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- ─── Sidebar Navigation ─── -->
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <span class="logo">🍽️</span>
+            <h1>Meal Planner</h1>
+        </div>
+        <ul class="nav-links">
+            <li><a href="#" class="nav-link active" data-view="meal-plans">📅 Calendar</a></li>
+            <li><a href="#" class="nav-link" data-view="recipes">📖 Recipes</a></li>
+            <li><a href="#" class="nav-link" data-view="chat">🤖 AI Chef</a></li>
+        </ul>
+    </nav>
+
+    <!-- ─── Main Content ─── -->
+    <main class="content">
+
+        <!-- ═══ CALENDAR VIEW ═══ -->
+        <section id="view-meal-plans" class="view active">
+            <div class="view-header">
+                <h2>Calendar</h2>
+            </div>
+
+            <!-- Month calendar -->
+            <div class="calendar-nav">
+                <button class="btn btn-ghost" id="cal-prev">&lsaquo;</button>
+                <h3 id="cal-month-label"></h3>
+                <button class="btn btn-ghost" id="cal-next">&rsaquo;</button>
+                <button class="btn btn-ghost btn-small" id="cal-today" style="margin-left:12px">Today</button>
+            </div>
+            <div id="calendar-grid" class="calendar-month-grid"></div>
+
+            <!-- Shopping list -->
+            <div class="shopping-section" style="margin-top:32px">
+                <button class="btn btn-secondary" id="btn-shopping-list">🛒 Shopping List</button>
+                <div id="shopping-picker" class="hidden card" style="margin-top:12px;padding:16px">
+                    <h4>Select weeks</h4>
+                    <div id="shopping-weeks" class="shopping-weeks"></div>
+                    <div class="form-actions" style="margin-top:12px">
+                        <button class="btn btn-primary btn-small" id="btn-generate-shopping">Generate</button>
+                    </div>
+                </div>
+                <div id="shopping-list" class="hidden card" style="margin-top:12px">
+                    <div class="shopping-list-header">
+                        <h4>Shopping List</h4>
+                        <button class="btn btn-small btn-copy-list" id="btn-copy-shopping" title="Copy unchecked items to clipboard">
+                            📋 Copy to Clipboard
+                        </button>
+                    </div>
+                    <ul id="shopping-items"></ul>
+                    <div class="add-item-row">
+                        <input type="text" id="add-shopping-item" class="input" placeholder="Add an item…">
+                        <button class="btn btn-primary btn-small" id="btn-add-shopping-item">+ Add</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ RECIPES VIEW ═══ -->
+        <section id="view-recipes" class="view">
+            <div class="view-header">
+                <h2>My Recipes</h2>
+                <div class="view-header-actions">
+                    <button class="btn btn-icon view-toggle" id="btn-toggle-view" title="Switch view">
+                        <span class="toggle-grid">☷</span><span class="toggle-list hidden">▦</span>
+                    </button>
+                    <button class="btn btn-secondary" id="btn-import-file">📁 Import File</button>
+                    <button class="btn btn-secondary" id="btn-import-url">🔗 Import from URL</button>
+                    <button class="btn btn-primary" id="btn-new-recipe">+ Add Recipe</button>
+                </div>
+            </div>
+            <input type="file" id="paprika-file-input" accept=".paprikarecipes,.paprikarecipe" class="hidden">
+
+            <!-- Category filter -->
+            <div id="category-filter" class="category-filter-bar hidden">
+                <button class="category-pill active" data-cat="all">All</button>
+            </div>
+
+            <!-- Recipe search + time filter -->
+            <div class="recipe-filter-bar">
+                <input type="text" id="recipe-search" class="input" placeholder="Search by name or ingredient…">
+                <div class="time-slider-wrap">
+                    <label for="time-slider">⏱ Max time: <span id="time-slider-label">Any</span></label>
+                    <input type="range" id="time-slider" min="0" max="180" step="5" value="180">
+                </div>
+            </div>
+
+            <!-- Import from URL (hidden) -->
+            <div id="import-section" class="card form-card hidden" style="max-width:600px">
+                <div class="url-input-group">
+                    <input type="url" id="import-url" placeholder="https://www.example.com/recipe/..." class="input">
+                    <button class="btn btn-primary" id="btn-scrape">Import</button>
+                </div>
+                <div id="scrape-loading" class="hidden loading-indicator">
+                    <div class="spinner"></div>
+                    <span>Fetching recipe…</span>
+                </div>
+                <div id="scrape-error" class="hidden error-msg"></div>
+            </div>
+
+            <!-- Scraped result preview -->
+            <div id="scrape-result" class="hidden card scraped-preview">
+                <div class="scraped-header">
+                    <img id="scraped-image" src="" alt="" class="scraped-image hidden">
+                    <div>
+                        <h3 id="scraped-title"></h3>
+                        <p class="scraped-meta"><span id="scraped-time"></span> <span id="scraped-servings"></span></p>
+                    </div>
+                </div>
+                <h4>Ingredients</h4>
+                <ul id="scraped-ingredients" class="ingredient-list"></ul>
+                <h4>Method</h4>
+                <ol id="scraped-instructions" class="instruction-list"></ol>
+                <div class="form-actions">
+                    <button class="btn btn-primary" id="btn-save-scraped">💾 Save to My Recipes</button>
+                </div>
+            </div>
+
+            <!-- New recipe form (hidden) -->
+            <div id="new-recipe-form" class="card form-card hidden">
+                <input type="text" id="recipe-title" placeholder="Recipe title" class="input">
+                <div class="tag-picker" id="category-tag-picker">
+                    <div class="tag-picker-tags" id="category-tags"></div>
+                    <input type="text" id="recipe-categories-input" class="tag-picker-input" placeholder="Add a category…" autocomplete="off">
+                    <div class="tag-picker-dropdown hidden" id="category-dropdown"></div>
+                </div>
+                <input type="text" id="recipe-servings" placeholder="Servings (e.g. 4 servings)" class="input">
+                <input type="text" id="recipe-time" placeholder="Total time (e.g. 30 min)" class="input">
+                <textarea id="recipe-ingredients" placeholder="Ingredients (one per line)" class="input textarea" rows="6"></textarea>
+                <textarea id="recipe-instructions" placeholder="Instructions (one step per line)" class="input textarea" rows="6"></textarea>
+                <div class="form-actions">
+                    <button class="btn btn-primary" id="btn-save-recipe">Save Recipe</button>
+                    <button class="btn btn-ghost" id="btn-cancel-recipe">Cancel</button>
+                </div>
+            </div>
+
+            <div id="recipes-list" class="recipes-grid"></div>
+        </section>
+
+        <!-- ═══ AI CHAT VIEW ═══ -->
+        <section id="view-chat" class="view">
+            <div class="view-header">
+                <h2>AI Chef</h2>
+            </div>
+            <div class="chat-container">
+                <div id="chat-messages" class="chat-messages">
+                    <div class="chat-bubble assistant">
+                        <p>Hey! 👋 I'm your AI Chef. Ask me to suggest meals, plan your week, or get creative with ingredients you have on hand!</p>
+                    </div>
+                </div>
+                <div class="chat-input-area">
+                    <textarea id="chat-input" placeholder="e.g. Suggest 3 healthy dinners for this week…" class="input textarea" rows="2"></textarea>
+                    <button class="btn btn-primary" id="btn-send-chat">Send</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Recipe detail modal (global, accessible from any view) -->
+        <div id="recipe-modal" class="modal hidden">
+            <div class="modal-overlay"></div>
+            <div class="modal-content card">
+                <button class="modal-close" id="btn-close-modal">&times;</button>
+                <div id="modal-recipe-body"></div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- ═══ PRE-COOK TIME PICKER ═══ -->
+    <div id="precook-screen" class="precook-screen hidden">
+        <div class="precook-card">
+            <h2 id="precook-title"></h2>
+            <p class="precook-duration" id="precook-duration"></p>
+            <div class="precook-time-section">
+                <label class="precook-label">🕐 What time should it be ready?</label>
+                <input type="time" id="precook-time-input" class="precook-time-input">
+                <div class="precook-result hidden" id="precook-result">
+                    <span class="precook-start-icon">⏰</span>
+                    <span>Start cooking at <strong id="precook-start-time"></strong></span>
+                </div>
+                <p class="precook-no-time-hint" id="precook-no-time-hint">Optional — skip if you don't need a timer</p>
+            </div>
+            <div class="precook-actions">
+                <button class="btn btn-primary precook-go" id="precook-go">🍳 Let's Cook!</button>
+                <button class="btn btn-ghost" id="precook-cancel">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ COOKING MODE (full-screen overlay) ═══ -->
+    <div id="cooking-mode" class="cooking-mode hidden">
+        <div class="cooking-topbar">
+            <button class="btn cooking-exit" id="cooking-exit">✕ Exit</button>
+            <div class="cooking-title" id="cooking-title"></div>
+            <div class="cooking-topbar-right">
+                <div class="cooking-start-time hidden" id="cooking-start-time" title="When you should have started">
+                    <span class="cooking-start-time-icon">⏰</span>
+                    <span id="cooking-start-time-text"></span>
+                </div>
+                <button class="btn cooking-toggle-ingredients" id="cooking-toggle-ingredients">📝 Ingredients</button>
+                <span class="cooking-wake-lock" id="cooking-wake-lock" title="Screen will stay on">🔒 Screen On</span>
+            </div>
+        </div>
+
+        <div class="cooking-body">
+            <!-- Ingredients slide-out panel -->
+            <div class="cooking-ingredients-panel hidden" id="cooking-ingredients-panel">
+                <h3>Ingredients</h3>
+                <ul id="cooking-ingredients-list"></ul>
+            </div>
+
+            <div class="cooking-main">
+                <div class="cooking-progress">
+                    <div class="cooking-progress-bar" id="cooking-progress-bar"></div>
+                </div>
+
+                <div class="cooking-step-label" id="cooking-step-label">Step 1 of 5</div>
+                <div class="cooking-step-text" id="cooking-step-text"></div>
+
+                <div class="cooking-nav">
+                    <button class="btn btn-secondary cooking-nav-btn" id="cooking-prev">← Previous</button>
+                    <button class="btn btn-primary cooking-nav-btn cooking-nav-next" id="cooking-next">Next →</button>
+                </div>
+
+                <div class="cooking-hint">Use ← → arrow keys or swipe to navigate</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
