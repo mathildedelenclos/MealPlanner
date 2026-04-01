@@ -42,11 +42,14 @@ let currentCategoryFilter = "all";
 let currentSearchQuery = "";
 let recipeViewMode = "grid"; // "grid" or "list"
 let maxTimeFilter = null; // null = any, else max minutes
+let selectedRecipeIds = new Set();
 
 $("#btn-toggle-view").addEventListener("click", () => {
     recipeViewMode = recipeViewMode === "grid" ? "list" : "grid";
     $(".toggle-grid").classList.toggle("hidden", recipeViewMode === "list");
     $(".toggle-list").classList.toggle("hidden", recipeViewMode === "grid");
+    selectedRecipeIds.clear();
+    updateBulkActionBar();
     loadRecipes();
 });
 
@@ -151,7 +154,8 @@ async function loadRecipes() {
     container.innerHTML = filtered
         .map(
             (r) => isList ? `
-        <div class="recipe-row" data-id="${r.id}">
+        <div class="recipe-row${selectedRecipeIds.has(r.id) ? " selected" : ""}" data-id="${r.id}">
+            <input type="checkbox" class="recipe-select-cb" ${selectedRecipeIds.has(r.id) ? "checked" : ""}>
             ${r.image_url
                 ? `<img class="recipe-row-img" src="${r.image_url}" alt="">`
                 : `<div class="recipe-row-img placeholder">🍳</div>`}
@@ -179,9 +183,76 @@ async function loadRecipes() {
         .join("");
 
     container.querySelectorAll(".recipe-card, .recipe-row").forEach((card) => {
-        card.addEventListener("click", () => openRecipeModal(card.dataset.id));
+        const cb = card.querySelector(".recipe-select-cb");
+        if (cb) {
+            cb.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const id = parseInt(card.dataset.id);
+                if (cb.checked) {
+                    selectedRecipeIds.add(id);
+                    card.classList.add("selected");
+                } else {
+                    selectedRecipeIds.delete(id);
+                    card.classList.remove("selected");
+                }
+                updateBulkActionBar();
+            });
+        }
+        card.addEventListener("click", (e) => {
+            if (e.target.classList.contains("recipe-select-cb")) return;
+            openRecipeModal(card.dataset.id);
+        });
     });
 }
+
+// ─── Bulk Actions ───
+function updateBulkActionBar() {
+    const count = selectedRecipeIds.size;
+    $("#bulk-selected-count").textContent = `${count} selected`;
+    $("#btn-bulk-delete").disabled = count === 0;
+    $("#bulk-action-bar").classList.toggle("hidden", count === 0);
+}
+
+$("#btn-cancel-select").addEventListener("click", () => {
+    selectedRecipeIds.clear();
+    updateBulkActionBar();
+    loadRecipes();
+});
+
+$("#btn-select-all").addEventListener("click", () => {
+    const rows = $$("#recipes-list .recipe-row");
+    const allSelected = rows.length > 0 && selectedRecipeIds.size === rows.length;
+    if (allSelected) {
+        selectedRecipeIds.clear();
+        rows.forEach((row) => {
+            row.classList.remove("selected");
+            row.querySelector(".recipe-select-cb").checked = false;
+        });
+    } else {
+        rows.forEach((row) => {
+            const id = parseInt(row.dataset.id);
+            selectedRecipeIds.add(id);
+            row.classList.add("selected");
+            row.querySelector(".recipe-select-cb").checked = true;
+        });
+    }
+    updateBulkActionBar();
+    $("#btn-select-all").textContent = allSelected ? "Select All" : "Deselect All";
+});
+
+$("#btn-bulk-delete").addEventListener("click", async () => {
+    const count = selectedRecipeIds.size;
+    if (count === 0) return;
+    if (!confirm(`Delete ${count} recipe${count > 1 ? "s" : ""}? This cannot be undone.`)) return;
+    await fetch(`${API}/api/recipes/bulk-delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [...selectedRecipeIds] }),
+    });
+    selectedRecipeIds.clear();
+    updateBulkActionBar();
+    loadRecipes();
+});
 
 async function openRecipeModal(id, entryId, plannedServings) {
     const res = await fetch(`${API}/api/recipes/${id}`);

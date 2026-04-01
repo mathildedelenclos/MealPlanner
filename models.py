@@ -87,6 +87,16 @@ def delete_recipe(recipe_id):
     conn.close()
 
 
+def delete_recipes_bulk(recipe_ids):
+    if not recipe_ids:
+        return
+    conn = get_db()
+    placeholders = ",".join("?" for _ in recipe_ids)
+    conn.execute(f"DELETE FROM recipes WHERE id IN ({placeholders})", recipe_ids)
+    conn.commit()
+    conn.close()
+
+
 def update_recipe(recipe_id, title, ingredients, instructions,
                   source_url=None, image_url=None, total_time=None,
                   servings=None, categories=None):

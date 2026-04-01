@@ -743,6 +743,52 @@ body {
     border-radius: 12px;
     white-space: nowrap;
 }
+
+/* ─── Select Mode / Bulk Actions ─── */
+.recipe-select-cb {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    cursor: pointer;
+    accent-color: var(--primary);
+}
+.recipe-row.selected {
+    background: #eff6ff;
+    box-shadow: inset 0 0 0 2px var(--primary), var(--shadow);
+}
+.bulk-action-bar {
+    position: sticky;
+    bottom: 0;
+    background: var(--card-bg);
+    border-top: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 -4px 12px rgba(0,0,0,.08);
+    border-radius: var(--radius) var(--radius) 0 0;
+    z-index: 50;
+}
+#bulk-selected-count {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+}
+.bulk-action-buttons {
+    display: flex;
+    gap: 8px;
+}
+.btn-danger {
+    background: var(--danger);
+    color: #fff;
+    border: none;
+}
+.btn-danger:hover { background: var(--danger-hover); }
+.btn-danger:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
 .modal-recipe-cats { margin-bottom: 12px; }
 
 /* ───────────────────────────────────

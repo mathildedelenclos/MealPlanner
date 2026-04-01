@@ -88,6 +88,16 @@ def api_delete_recipe(recipe_id):
     return jsonify({"ok": True})
 
 
+@app.route("/api/recipes/bulk-delete", methods=["POST"])
+def api_bulk_delete_recipes():
+    data = request.get_json(force=True)
+    ids = data.get("ids", [])
+    if not ids:
+        return jsonify({"error": "No recipe IDs provided"}), 400
+    models.delete_recipes_bulk(ids)
+    return jsonify({"ok": True, "deleted": len(ids)})
+
+
 @app.route("/api/recipes/<int:recipe_id>", methods=["PUT"])
 def api_update_recipe(recipe_id):
     data = request.get_json(force=True)

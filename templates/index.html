@@ -162,6 +162,16 @@
             </div>
 
             <div id="recipes-list" class="recipes-grid"></div>
+
+            <!-- Bulk action bar (shown during select mode) -->
+            <div id="bulk-action-bar" class="bulk-action-bar hidden">
+                <span id="bulk-selected-count">0 selected</span>
+                <div class="bulk-action-buttons">
+                    <button class="btn btn-small" id="btn-select-all">Select All</button>
+                    <button class="btn btn-small btn-danger" id="btn-bulk-delete">Delete Selected</button>
+                    <button class="btn btn-small btn-ghost" id="btn-cancel-select">Cancel</button>
+                </div>
+            </div>
         </section>
 
         <!-- ═══ AI CHAT VIEW ═══ -->
