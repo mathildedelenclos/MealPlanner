@@ -283,7 +283,8 @@ def api_import_excel():
     imported = []
     try:
         wb = openpyxl.load_workbook(io.BytesIO(f.read()), read_only=True)
-        ws = wb.active
+        # Prefer "Full Recipes" sheet if it exists, otherwise use active sheet
+        ws = wb["Full Recipes"] if "Full Recipes" in wb.sheetnames else wb.active
 
         # Read header row to map columns
         headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
@@ -309,16 +310,29 @@ def api_import_excel():
                 pantry = [p.strip() for p in re.split(r'[|\n]', pantry_raw) if p.strip()]
                 ingredients.extend(pantry)
 
-            # Instructions: split on || for steps, then clean "Step N:" prefixes
+            # Instructions: split on || or "Step N:" boundaries, then clean prefixes
             method_raw = str(col(row, "method", "instructions", "directions"))
-            steps = [s.strip() for s in method_raw.split("||") if s.strip()]
+            if "||" in method_raw:
+                steps = [s.strip() for s in method_raw.split("||") if s.strip()]
+            else:
+                steps = [s.strip() for s in re.split(r'(?=Step\s+\d+\s*:)', method_raw) if s.strip()]
             instructions = [re.sub(r'^Step\s+\d+\s*:\s*', '', s) for s in steps]
 
-            # Cook time
-            cook_time_2 = col(row, "cook time 2 servings (mins)", "cook time")
-            cook_time_4 = col(row, "cook time 4 servings (mins)")
-            cook_time = cook_time_2 or cook_time_4
-            total_time = f"{int(cook_time)} min" if cook_time and str(cook_time).strip() else None
+            # Cook time / total time
+            total_time_raw = col(row, "total time", "total_time")
+            cook_time_raw = col(row, "cook time 2 servings (mins)", "cook time",
+                                "cook time 4 servings (mins)")
+            if total_time_raw and str(total_time_raw).strip():
+                total_time = str(total_time_raw).strip()
+            elif cook_time_raw and str(cook_time_raw).strip():
+                ct = str(cook_time_raw).strip()
+                # If it's already a human string like "10 mins", use as-is
+                if any(c.isalpha() for c in ct):
+                    total_time = ct
+                else:
+                    total_time = f"{int(ct)} min"
+            else:
+                total_time = None
 
             # Servings: default to 2 for Gousto-style
             servings = str(col(row, "servings")) or "2 servings"
@@ -326,10 +340,10 @@ def api_import_excel():
                 servings = "2 servings"
 
             # Categories from cuisine column
-            cuisine = str(col(row, "cuisine", "category", "categories")).strip()
+            cuisine = str(col(row, "categories", "category", "cuisine")).strip()
             categories = [cuisine] if cuisine else []
 
-            source_url = str(col(row, "link", "url", "source_url")).strip() or None
+            source_url = str(col(row, "source url", "source_url", "link", "url")).strip() or None
 
             recipe_id = models.create_recipe(
                 title=title,

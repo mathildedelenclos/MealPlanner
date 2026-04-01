@@ -6,6 +6,8 @@ const API = "";
 
 // ─── State ───
 let calendarMonth = new Date();  // currently displayed month
+let calendarViewMode = "week";   // "week" or "month"
+let calendarWeekStart = getMonday(new Date()); // Monday of current week
 let chatHistory = [];
 
 // ─── DOM Helpers ───
@@ -38,12 +40,13 @@ $$(".nav-link").forEach((link) => {
 // Recipes
 // ═══════════════════════════════════
 
-let currentCategoryFilter = "all";
+let selectedCategoryFilters = []; // category names currently filtering
 let currentSearchQuery = "";
 let recipeViewMode = "grid"; // "grid" or "list"
 let maxTimeFilter = null; // null = any, else max minutes
 let currentSort = "newest"; // newest | oldest | a-z | z-a | time-asc | time-desc
 let selectedRecipeIds = new Set();
+let searchCategoriesList = []; // populated from /api/categories
 
 $("#btn-toggle-view").addEventListener("click", () => {
     recipeViewMode = recipeViewMode === "grid" ? "list" : "grid";
@@ -83,10 +86,77 @@ $("#recipe-search").addEventListener("input", (() => {
         clearTimeout(timer);
         timer = setTimeout(() => {
             currentSearchQuery = e.target.value.trim().toLowerCase();
+            showSearchCategoryDropdown();
             loadRecipes();
         }, 250);
     };
 })());
+
+// ── Search bar category autocomplete ──
+const searchInput = $("#recipe-search");
+const searchChipsEl = $("#search-category-chips");
+const searchDropdown = $("#search-category-dropdown");
+
+function renderSearchCategoryChips() {
+    searchChipsEl.innerHTML = selectedCategoryFilters.map((c, i) =>
+        `<span class="tag-chip">${escHtml(c)}<button class="tag-chip-remove" data-idx="${i}">&times;</button></span>`
+    ).join("");
+    searchChipsEl.querySelectorAll(".tag-chip-remove").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            selectedCategoryFilters.splice(parseInt(btn.dataset.idx), 1);
+            renderSearchCategoryChips();
+            loadRecipes();
+        });
+    });
+    // Update placeholder based on selections
+    searchInput.placeholder = selectedCategoryFilters.length > 0
+        ? "Search within selected categories…"
+        : "Search by name, ingredient, or category…";
+}
+
+function showSearchCategoryDropdown() {
+    const q = searchInput.value.trim().toLowerCase();
+    if (!q) { searchDropdown.classList.add("hidden"); return; }
+    const suggestions = searchCategoriesList.filter((c) =>
+        !selectedCategoryFilters.includes(c) && c.toLowerCase().includes(q)
+    );
+    if (suggestions.length === 0) { searchDropdown.classList.add("hidden"); return; }
+    searchDropdown.innerHTML = suggestions.map((c) =>
+        `<div class="tag-dropdown-item" data-value="${escHtml(c)}">${escHtml(c)}</div>`
+    ).join("");
+    searchDropdown.classList.remove("hidden");
+    searchDropdown.querySelectorAll(".tag-dropdown-item").forEach((item) => {
+        item.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            const cat = item.dataset.value;
+            if (!selectedCategoryFilters.includes(cat)) {
+                selectedCategoryFilters.push(cat);
+            }
+            searchInput.value = "";
+            currentSearchQuery = "";
+            searchDropdown.classList.add("hidden");
+            renderSearchCategoryChips();
+            loadRecipes();
+            searchInput.focus();
+        });
+    });
+}
+
+searchInput.addEventListener("focus", showSearchCategoryDropdown);
+searchInput.addEventListener("blur", () => {
+    setTimeout(() => searchDropdown.classList.add("hidden"), 150);
+});
+searchInput.addEventListener("keydown", (e) => {
+    if (e.key === "Backspace" && !searchInput.value && selectedCategoryFilters.length > 0) {
+        selectedCategoryFilters.pop();
+        renderSearchCategoryChips();
+        loadRecipes();
+    }
+});
+
+// Click on the container focuses the input
+$("#search-tag-picker").addEventListener("click", () => searchInput.focus());
 
 $("#recipe-sort").addEventListener("change", (e) => {
     currentSort = e.target.value;
@@ -101,30 +171,14 @@ async function loadRecipes() {
     const recipes = await recipesRes.json();
     const categories = await catsRes.json();
     const container = $("#recipes-list");
-    const filterBar = $("#category-filter");
 
-    // Build category filter bar
-    if (categories.length > 0) {
-        filterBar.classList.remove("hidden");
-        filterBar.innerHTML =
-            `<button class="category-pill${currentCategoryFilter === "all" ? " active" : ""}" data-cat="all">All</button>` +
-            categories.map((c) =>
-                `<button class="category-pill${currentCategoryFilter === c ? " active" : ""}" data-cat="${escHtml(c)}">${escHtml(c)}</button>`
-            ).join("");
-        filterBar.querySelectorAll(".category-pill").forEach((btn) => {
-            btn.addEventListener("click", () => {
-                currentCategoryFilter = btn.dataset.cat;
-                loadRecipes();
-            });
-        });
-    } else {
-        filterBar.classList.add("hidden");
-    }
+    // Update category list for search autocomplete
+    searchCategoriesList = categories;
 
-    // Filter by category
-    let filtered = currentCategoryFilter === "all"
+    // Filter by category (multi-select)
+    let filtered = selectedCategoryFilters.length === 0
         ? recipes
-        : recipes.filter((r) => (r.categories || []).includes(currentCategoryFilter));
+        : recipes.filter((r) => selectedCategoryFilters.every((c) => (r.categories || []).includes(c)));
 
     // Filter by search query (name or ingredients)
     if (currentSearchQuery) {
@@ -175,7 +229,9 @@ async function loadRecipes() {
             ? "No recipes yet. Add one manually or import from a URL!"
             : currentSearchQuery
                 ? "No recipes match your search."
-                : "No recipes in this category.";
+                : selectedCategoryFilters.length > 0
+                    ? "No recipes match those categories."
+                    : "No recipes yet.";
         container.innerHTML = `<div class="empty-state"><span class="emoji">📖</span>${msg}</div>`;
         return;
     }
@@ -317,17 +373,17 @@ async function openRecipeModal(id, entryId, plannedServings) {
         ${r.image_url ? `<img class="modal-recipe-image" src="${r.image_url}" alt="">` : ""}
         <h2 class="modal-recipe-title">${escHtml(r.title)}</h2>
         <p class="modal-recipe-meta">${r.total_time || ""} ${servingsLabel} ${r.source_url ? `· <a href="${r.source_url}" target="_blank">Source ↗</a>` : ""}</p>
+        <div class="modal-actions">
+            ${cookBtn}
+            ${actionBtn}
+        </div>
         ${(r.categories || []).length > 0
             ? `<div class="modal-recipe-cats">${r.categories.map((c) => `<span class="cat-pill">${escHtml(c)}</span>`).join("")}</div>`
             : ""}
         <h4>Ingredients</h4>
         <ul class="ingredient-list">${ingredients.map((i) => `<li>${escHtml(i)}</li>`).join("")}</ul>
         <h4>Method</h4>
-        <ol class="instruction-list">${r.instructions.map((s) => `<li>${escHtml(s)}</li>`).join("")}</ol>
-        <div class="modal-actions">
-            ${cookBtn}
-            ${actionBtn}
-        </div>`;
+        <ol class="instruction-list">${r.instructions.map((s) => `<li>${escHtml(s)}</li>`).join("")}</ol>`;
 
     const removeBtn = body.querySelector("#btn-remove-entry-modal");
     if (removeBtn) {
@@ -371,9 +427,10 @@ async function showEditRecipeForm(recipe) {
     body.innerHTML = `
         <h2 style="margin-top:0">Edit Recipe</h2>
         <input type="text" id="edit-recipe-title" class="input" value="${escHtml(recipe.title)}" placeholder="Recipe title">
-        <div id="edit-category-area" style="margin:8px 0">
-            <div id="edit-category-tags" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px"></div>
-            <input type="text" id="edit-category-input" class="input" placeholder="Add a category…" style="font-size:13px">
+        <div class="tag-picker" id="edit-category-picker">
+            <div class="tag-picker-tags" id="edit-category-tags"></div>
+            <input type="text" id="edit-category-input" class="tag-picker-input" placeholder="Add a category…" autocomplete="off">
+            <div class="tag-picker-dropdown hidden" id="edit-category-dropdown"></div>
         </div>
         <input type="text" id="edit-recipe-servings" class="input" value="${escHtml(recipe.servings || "")}" placeholder="Servings (e.g. 4 servings)">
         <input type="text" id="edit-recipe-time" class="input" value="${escHtml(recipe.total_time || "")}" placeholder="Total time (e.g. 30 min)">
@@ -386,31 +443,81 @@ async function showEditRecipeForm(recipe) {
 
     function renderEditTags() {
         const container = body.querySelector("#edit-category-tags");
-        container.innerHTML = editCategories.map((c) =>
-            `<span class="cat-pill">${escHtml(c)} <button class="edit-cat-remove" data-cat="${escHtml(c)}">&times;</button></span>`
+        container.innerHTML = editCategories.map((c, i) =>
+            `<span class="tag-chip">${escHtml(c)}<button class="tag-chip-remove" data-idx="${i}">&times;</button></span>`
         ).join("");
-        container.querySelectorAll(".edit-cat-remove").forEach((btn) => {
+        container.querySelectorAll(".tag-chip-remove").forEach((btn) => {
             btn.addEventListener("click", (e) => {
-                e.preventDefault();
-                editCategories = editCategories.filter((c) => c !== btn.dataset.cat);
+                e.stopPropagation();
+                editCategories.splice(parseInt(btn.dataset.idx), 1);
                 renderEditTags();
             });
         });
     }
     renderEditTags();
 
-    const catInput = body.querySelector("#edit-category-input");
-    catInput.addEventListener("keydown", (e) => {
+    const editCatInput = body.querySelector("#edit-category-input");
+    const editCatDropdown = body.querySelector("#edit-category-dropdown");
+
+    function showEditCategoryDropdown() {
+        const q = editCatInput.value.trim().toLowerCase();
+        const suggestions = allCategoriesList.filter((c) =>
+            !editCategories.includes(c) && c.toLowerCase().includes(q)
+        );
+        if (suggestions.length === 0 && !q) {
+            editCatDropdown.classList.add("hidden");
+            return;
+        }
+        let items = suggestions.map((c) =>
+            `<div class="tag-dropdown-item" data-value="${escHtml(c)}">${escHtml(c)}</div>`
+        ).join("");
+        if (q && !allCategoriesList.some((c) => c.toLowerCase() === q)) {
+            items += `<div class="tag-dropdown-item tag-dropdown-new" data-value="${escHtml(editCatInput.value.trim())}">+ Create "${escHtml(editCatInput.value.trim())}"</div>`;
+        }
+        if (!items) { editCatDropdown.classList.add("hidden"); return; }
+        editCatDropdown.innerHTML = items;
+        editCatDropdown.classList.remove("hidden");
+        editCatDropdown.querySelectorAll(".tag-dropdown-item").forEach((item) => {
+            item.addEventListener("mousedown", (e) => {
+                e.preventDefault();
+                addEditCategory(item.dataset.value);
+            });
+        });
+    }
+
+    function addEditCategory(name) {
+        const trimmed = name.trim();
+        if (trimmed && !editCategories.includes(trimmed)) {
+            editCategories.push(trimmed);
+            if (!allCategoriesList.includes(trimmed)) allCategoriesList.push(trimmed);
+        }
+        editCatInput.value = "";
+        editCatDropdown.classList.add("hidden");
+        renderEditTags();
+        editCatInput.focus();
+    }
+
+    editCatInput.addEventListener("input", showEditCategoryDropdown);
+    editCatInput.addEventListener("focus", showEditCategoryDropdown);
+    editCatInput.addEventListener("blur", () => {
+        setTimeout(() => editCatDropdown.classList.add("hidden"), 150);
+    });
+    editCatInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter" || e.key === ",") {
             e.preventDefault();
-            const val = catInput.value.replace(",", "").trim();
-            if (val && !editCategories.includes(val)) {
-                editCategories.push(val);
-                renderEditTags();
-            }
-            catInput.value = "";
+            const val = editCatInput.value.trim().replace(/,$/, "");
+            if (val) addEditCategory(val);
+        }
+        if (e.key === "Backspace" && !editCatInput.value && editCategories.length > 0) {
+            editCategories.pop();
+            renderEditTags();
         }
     });
+
+    // Fetch categories for autocomplete if not already loaded
+    if (allCategoriesList.length === 0) {
+        fetch(`${API}/api/categories`).then(r => r.json()).then(cats => { allCategoriesList = cats; }).catch(() => {});
+    }
 
     body.querySelector("#btn-cancel-edit-recipe").addEventListener("click", () => {
         openRecipeModal(recipe.id);
@@ -465,6 +572,25 @@ async function deleteRecipe(id) {
 // New recipe form
 let selectedCategories = [];
 let allCategoriesList = [];
+
+// ── Add Recipe dropdown toggle ──
+const addRecipeMenu = $("#add-recipe-menu");
+$("#btn-add-recipe-toggle").addEventListener("click", (e) => {
+    e.stopPropagation();
+    addRecipeMenu.classList.toggle("hidden");
+});
+// Close dropdown when clicking outside
+document.addEventListener("click", (e) => {
+    if (!e.target.closest("#add-recipe-dropdown")) {
+        addRecipeMenu.classList.add("hidden");
+    }
+});
+// Close dropdown when any option is clicked
+addRecipeMenu.querySelectorAll(".add-recipe-option").forEach((opt) => {
+    opt.addEventListener("click", () => {
+        addRecipeMenu.classList.add("hidden");
+    });
+});
 
 $("#btn-new-recipe").addEventListener("click", async () => {
     hide($("#import-section"));
@@ -712,6 +838,27 @@ $("#btn-save-scraped").addEventListener("click", async () => {
 
 const MEALS = ["lunch", "dinner"];
 
+// Get Monday of a given date's week
+function getMonday(d) {
+    const date = new Date(d);
+    const day = date.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    date.setDate(date.getDate() + diff);
+    date.setHours(0, 0, 0, 0);
+    return date;
+}
+
+// Get 7 dates for a week starting from Monday
+function getWeekGridDates(monday) {
+    const dates = [];
+    for (let i = 0; i < 7; i++) {
+        const d = new Date(monday);
+        d.setDate(monday.getDate() + i);
+        dates.push(d);
+    }
+    return dates;
+}
+
 // Helpers to get dates for the visible calendar grid
 function getCalendarGridDates(year, month) {
     // month is 0-indexed
@@ -736,6 +883,99 @@ function isoDate(d) {
 }
 
 async function loadCalendar() {
+    if (calendarViewMode === "week") {
+        await loadCalendarWeek();
+    } else {
+        await loadCalendarMonth();
+    }
+}
+
+async function loadCalendarWeek() {
+    const weekDates = getWeekGridDates(calendarWeekStart);
+
+    // Update label
+    const startLabel = weekDates[0].toLocaleDateString(undefined, { day: "numeric", month: "short" });
+    const endLabel = weekDates[6].toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+    $("#cal-month-label").textContent = `${startLabel} – ${endLabel}`;
+
+    // Fetch entries — may span two months
+    const months = new Set(weekDates.map(d => `${d.getFullYear()}-${d.getMonth() + 1}`));
+    let entries = [];
+    for (const key of months) {
+        const [y, m] = key.split("-");
+        const res = await fetch(`${API}/api/calendar?year=${y}&month=${m}`);
+        entries = entries.concat(await res.json());
+    }
+
+    const entryMap = {};
+    entries.forEach((e) => {
+        if (!entryMap[e.entry_date]) entryMap[e.entry_date] = [];
+        entryMap[e.entry_date].push(e);
+    });
+
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const todayISO = isoDate(today);
+
+    const grid = $("#calendar-grid");
+    grid.className = "calendar-week-grid";
+
+    let html = `<div class="cal-week-grid-inner">`;
+    weekDates.forEach((dateObj) => {
+        const iso = isoDate(dateObj);
+        const isToday = iso === todayISO;
+        const dayName = dateObj.toLocaleDateString(undefined, { weekday: "short" });
+        const dayNum = dateObj.getDate();
+        html += `<div class="cal-week-wh${isToday ? " cal-week-wh-today" : ""}">${dayName} <span class="cal-week-date-num">${dayNum}</span></div>`;
+    });
+
+    weekDates.forEach((dateObj) => {
+        const iso = isoDate(dateObj);
+        const isToday = iso === todayISO;
+        const dayEntries = entryMap[iso] || [];
+
+        html += `<div class="cal-week-cell${isToday ? " cal-cell-today" : ""}" data-date="${iso}">`;
+
+        MEALS.forEach((meal) => {
+            const mealEntries = dayEntries.filter((e) => e.meal_type === meal);
+            html += `<div class="cal-meal-slot" data-day="${iso}" data-meal="${meal}">`;
+            html += `<span class="cal-meal-label">${meal}</span>`;
+            mealEntries.forEach((e) => {
+                if (e.note) {
+                    html += `<div class="cal-entry cal-entry-note" draggable="true"
+                                  data-entry-id="${e.id}" data-entry-type="note">
+                        <span class="cal-entry-text">📝 ${escHtml(e.note)}</span>
+                        <span class="cal-entry-actions">
+                            <button class="cal-entry-copy" data-entry-id="${e.id}" title="Copy to…">📋</button>
+                            <button class="cal-entry-remove" data-entry-id="${e.id}">&times;</button>
+                        </span>
+                    </div>`;
+                } else {
+                    html += `<div class="cal-entry" draggable="true"
+                                  data-entry-id="${e.id}" data-entry-type="recipe"
+                                  data-recipe-id="${e.recipe_id}">
+                        <a href="#" class="cal-entry-link" data-recipe-id="${e.recipe_id}" data-entry-id="${e.id}" data-servings="${e.servings}">${escHtml(e.recipe_title)}</a>
+                        <span class="cal-entry-srv">${e.servings}srv</span>
+                        <span class="cal-entry-actions">
+                            <button class="cal-entry-copy" data-entry-id="${e.id}" title="Copy to…">📋</button>
+                            <button class="cal-entry-remove" data-entry-id="${e.id}">&times;</button>
+                        </span>
+                    </div>`;
+                }
+            });
+            html += `<button class="cal-add-btn" data-day="${iso}" data-meal="${meal}">+</button>`;
+            html += `</div>`;
+        });
+
+        html += `</div>`;
+    });
+    html += `</div>`;
+    grid.innerHTML = html;
+
+    bindCalendarEvents(grid);
+}
+
+async function loadCalendarMonth() {
     const year = calendarMonth.getFullYear();
     const month = calendarMonth.getMonth(); // 0-indexed
     const apiMonth = month + 1; // 1-indexed for API
@@ -782,6 +1022,8 @@ async function loadCalendar() {
     const todayISO = isoDate(today);
 
     const grid = $("#calendar-grid");
+    grid.className = "calendar-month-grid";
+
     let html = `<div class="cal-weekday-header">`;
     ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].forEach(d => {
         html += `<div class="cal-wh">${d}</div>`;
@@ -833,6 +1075,10 @@ async function loadCalendar() {
     html += `</div>`;
     grid.innerHTML = html;
 
+    bindCalendarEvents(grid);
+}
+
+function bindCalendarEvents(grid) {
     // Bind add buttons
     grid.querySelectorAll(".cal-add-btn").forEach((btn) => {
         btn.addEventListener("click", () => openAddMealModal(btn.dataset.day, btn.dataset.meal));
@@ -958,20 +1204,46 @@ async function loadCalendar() {
             loadCalendar();
         });
     });
-
 }
 
 // Calendar navigation
 $("#cal-prev").addEventListener("click", () => {
-    calendarMonth.setMonth(calendarMonth.getMonth() - 1);
+    if (calendarViewMode === "week") {
+        calendarWeekStart.setDate(calendarWeekStart.getDate() - 7);
+    } else {
+        calendarMonth.setMonth(calendarMonth.getMonth() - 1);
+    }
     loadCalendar();
 });
 $("#cal-next").addEventListener("click", () => {
-    calendarMonth.setMonth(calendarMonth.getMonth() + 1);
+    if (calendarViewMode === "week") {
+        calendarWeekStart.setDate(calendarWeekStart.getDate() + 7);
+    } else {
+        calendarMonth.setMonth(calendarMonth.getMonth() + 1);
+    }
     loadCalendar();
 });
 $("#cal-today").addEventListener("click", () => {
     calendarMonth = new Date();
+    calendarWeekStart = getMonday(new Date());
+    loadCalendar();
+});
+
+// View toggle
+$("#cal-view-week").addEventListener("click", () => {
+    if (calendarViewMode === "week") return;
+    calendarViewMode = "week";
+    calendarWeekStart = getMonday(new Date());
+    $("#cal-view-week").classList.add("active");
+    $("#cal-view-month").classList.remove("active");
+    loadCalendar();
+});
+$("#cal-view-month").addEventListener("click", () => {
+    if (calendarViewMode === "month") return;
+    calendarViewMode = "month";
+    calendarMonth = new Date();
+    $("#cal-view-month").classList.add("active");
+    $("#cal-view-week").classList.remove("active");
     loadCalendar();
 });
 
@@ -1082,12 +1354,8 @@ function openAssignToCalendarModal(recipeId, title, defaultServings) {
 
 // ── Copy-to picker modal ──
 function openCopyModal(entryId) {
-    const year = calendarMonth.getFullYear();
-    const month = calendarMonth.getMonth();
-    const gridDates = getCalendarGridDates(year, month);
-    // Only show dates in current month
-    const monthDates = gridDates.filter(d => d.getMonth() === month);
-    const uniqueDates = [...new Set(monthDates.map(d => isoDate(d)))];
+    const weekDates = getWeekGridDates(calendarViewMode === "week" ? calendarWeekStart : getMonday(new Date()));
+    const uniqueDates = weekDates.map(d => isoDate(d));
 
     const modal = document.createElement("div");
     modal.className = "add-meal-modal";
