@@ -4,6 +4,7 @@ import gzip
 import json
 import re
 import zipfile
+import threading
 import requests
 from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
@@ -84,6 +85,28 @@ def api_create_recipe():
 @app.route("/api/recipes/<int:recipe_id>", methods=["DELETE"])
 def api_delete_recipe(recipe_id):
     models.delete_recipe(recipe_id)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/recipes/<int:recipe_id>", methods=["PUT"])
+def api_update_recipe(recipe_id):
+    data = request.get_json(force=True)
+    title = data.get("title", "").strip()
+    ingredients = data.get("ingredients", [])
+    instructions = data.get("instructions", [])
+    if not title or not ingredients:
+        return jsonify({"error": "Title and ingredients are required"}), 400
+    models.update_recipe(
+        recipe_id,
+        title=title,
+        ingredients=ingredients,
+        instructions=instructions,
+        source_url=data.get("source_url"),
+        image_url=data.get("image_url"),
+        total_time=data.get("total_time"),
+        servings=data.get("servings"),
+        categories=data.get("categories"),
+    )
     return jsonify({"ok": True})
 
 
@@ -232,6 +255,104 @@ def api_import_paprika():
 
     except Exception as e:
         return jsonify({"error": f"Failed to parse file: {str(e)}"}), 400
+
+    return jsonify({"imported": imported, "count": len(imported)})
+
+
+@app.route("/api/import-excel", methods=["POST"])
+def api_import_excel():
+    """Import recipes from an Excel (.xlsx) file."""
+    import openpyxl
+
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+    f = request.files["file"]
+    if not f.filename:
+        return jsonify({"error": "No file selected"}), 400
+
+    imported = []
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(f.read()), read_only=True)
+        ws = wb.active
+
+        # Read header row to map columns
+        headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+        header_map = {h.strip().lower(): i for i, h in enumerate(headers) if h}
+
+        def col(row, *names):
+            for name in names:
+                if name in header_map:
+                    val = row[header_map[name]]
+                    return val if val is not None else ""
+            return ""
+
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            title = str(col(row, "recipe name", "title", "name")).strip()
+            if not title:
+                continue
+
+            # Ingredients: pipe-separated or newline-separated
+            ing_raw = str(col(row, "ingredients"))
+            pantry_raw = str(col(row, "pantry staples", "pantry"))
+            ingredients = [i.strip() for i in re.split(r'[|\n]', ing_raw) if i.strip()]
+            if pantry_raw:
+                pantry = [p.strip() for p in re.split(r'[|\n]', pantry_raw) if p.strip()]
+                ingredients.extend(pantry)
+
+            # Instructions: split on || for steps, then clean "Step N:" prefixes
+            method_raw = str(col(row, "method", "instructions", "directions"))
+            steps = [s.strip() for s in method_raw.split("||") if s.strip()]
+            instructions = [re.sub(r'^Step\s+\d+\s*:\s*', '', s) for s in steps]
+
+            # Cook time
+            cook_time_2 = col(row, "cook time 2 servings (mins)", "cook time")
+            cook_time_4 = col(row, "cook time 4 servings (mins)")
+            cook_time = cook_time_2 or cook_time_4
+            total_time = f"{int(cook_time)} min" if cook_time and str(cook_time).strip() else None
+
+            # Servings: default to 2 for Gousto-style
+            servings = str(col(row, "servings")) or "2 servings"
+            if servings and not any(c.isdigit() for c in str(servings)):
+                servings = "2 servings"
+
+            # Categories from cuisine column
+            cuisine = str(col(row, "cuisine", "category", "categories")).strip()
+            categories = [cuisine] if cuisine else []
+
+            source_url = str(col(row, "link", "url", "source_url")).strip() or None
+
+            recipe_id = models.create_recipe(
+                title=title,
+                ingredients=ingredients if ingredients else [""],
+                instructions=instructions if instructions else [""],
+                source_url=source_url,
+                image_url=None,
+                total_time=total_time,
+                servings=servings,
+                categories=categories,
+            )
+            imported.append({"id": recipe_id, "title": title, "source_url": source_url})
+
+        wb.close()
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to parse Excel file: {str(e)}"}), 400
+
+    # Fetch images in background so the import returns immediately
+    recipes_to_scrape = [(r["id"], r.get("source_url")) for r in imported if r.get("source_url")]
+    if recipes_to_scrape:
+        def _fetch_images(pairs):
+            import time
+            for rid, url in pairs:
+                try:
+                    img = _scrape_image_url(url)
+                    if img:
+                        models.update_recipe_image(rid, img)
+                    time.sleep(0.5)  # be polite to the server
+                except Exception:
+                    pass
+        thread = threading.Thread(target=_fetch_images, args=(recipes_to_scrape,), daemon=True)
+        thread.start()
 
     return jsonify({"imported": imported, "count": len(imported)})
 
@@ -418,13 +539,26 @@ def api_regenerate_recipe():
 # Scrape Recipe Image from source URL
 # ──────────────────────────────────────
 
-@app.route("/api/scrape-recipe-image", methods=["POST"])
-def api_scrape_recipe_image():
-    """Scrape the hero image from a recipe source URL with multiple fallbacks."""
-    data = request.get_json(force=True)
-    url = data.get("source_url", "").strip()
-    if not url:
-        return jsonify({"error": "source_url is required"}), 400
+def _scrape_image_url(url):
+    """Scrape the hero image from a recipe source URL. Returns image_url or None."""
+    # Gousto: use their CMS API (pages are client-rendered so normal scraping fails)
+    if "gousto.co.uk" in url:
+        try:
+            slug = url.rstrip("/").split("/")[-1]
+            api_resp = requests.get(
+                f"https://production-api.gousto.co.uk/cmsreadbroker/v1/recipe/{slug}",
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=10,
+            )
+            if api_resp.status_code == 200:
+                images = api_resp.json().get("data", {}).get("entry", {}).get("media", {}).get("images", [])
+                # Pick the largest image available
+                if images:
+                    best = max(images, key=lambda i: i.get("width", 0))
+                    return best.get("image")
+        except Exception:
+            pass
+        return None
 
     try:
         resp = requests.get(
@@ -448,18 +582,16 @@ def api_scrape_recipe_image():
             allow_redirects=True,
         )
         if resp.status_code >= 400:
-            return jsonify({"error": f"URL returned {resp.status_code}"}), 404
+            return None
         html_text = resp.text
         image_url = None
 
-        # Attempt 1: recipe-scrapers
         try:
             scraper = scrape_html(html=html_text, org_url=url)
             image_url = scraper.image()
         except Exception:
             pass
 
-        # Attempt 2: Open Graph / meta tags fallback
         if not image_url:
             from bs4 import BeautifulSoup
             soup = BeautifulSoup(html_text, "html.parser")
@@ -487,10 +619,23 @@ def api_scrape_recipe_image():
                 from urllib.parse import urlparse
                 parsed = urlparse(url)
                 image_url = f"{parsed.scheme}://{parsed.netloc}{image_url}"
-            return jsonify({"image_url": image_url})
-        return jsonify({"error": "No image found on page"}), 404
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+            return image_url
+    except Exception:
+        pass
+    return None
+
+
+@app.route("/api/scrape-recipe-image", methods=["POST"])
+def api_scrape_recipe_image():
+    """Scrape the hero image from a recipe source URL with multiple fallbacks."""
+    data = request.get_json(force=True)
+    url = data.get("source_url", "").strip()
+    if not url:
+        return jsonify({"error": "source_url is required"}), 400
+    image_url = _scrape_image_url(url)
+    if image_url:
+        return jsonify({"image_url": image_url})
+    return jsonify({"error": "No image found on page"}), 404
 
 
 # ──────────────────────────────────────

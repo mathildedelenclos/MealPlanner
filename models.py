@@ -87,6 +87,28 @@ def delete_recipe(recipe_id):
     conn.close()
 
 
+def update_recipe(recipe_id, title, ingredients, instructions,
+                  source_url=None, image_url=None, total_time=None,
+                  servings=None, categories=None):
+    conn = get_db()
+    conn.execute(
+        """UPDATE recipes SET title=?, source_url=?, image_url=?,
+           total_time=?, servings=?, categories=?, ingredients=?, instructions=?
+           WHERE id=?""",
+        (title, source_url, image_url, total_time, servings,
+         json.dumps(categories or []), json.dumps(ingredients),
+         json.dumps(instructions), recipe_id))
+    conn.commit()
+    conn.close()
+
+
+def update_recipe_image(recipe_id, image_url):
+    conn = get_db()
+    conn.execute("UPDATE recipes SET image_url = ? WHERE id = ?", (image_url, recipe_id))
+    conn.commit()
+    conn.close()
+
+
 def _recipe_row_to_dict(row):
     return {
         "id": row["id"],
@@ -180,27 +202,119 @@ def copy_calendar_entry(entry_id, entry_date, meal_type):
     return new_id
 
 
+INGREDIENT_CATEGORIES = [
+    ("Meat & Fish", [
+        "chicken", "beef", "lamb", "pork", "bacon", "ham", "sausage", "mince",
+        "salmon", "cod", "prawn", "prawns", "fish", "turkey", "duck", "steak",
+        "chorizo", "pancetta", "anchovy", "anchovies", "tuna", "sea bass",
+        "mackerel", "sardine", "haddock", "brisket", "venison", "serrano",
+    ]),
+    ("Dairy & Eggs", [
+        "milk", "cream", "cheese", "butter", "yoghurt", "yogurt", "egg", "eggs",
+        "cheddar", "mozzarella", "parmesan", "mascarpone", "ricotta",
+        "creme fraiche", "halloumi", "feta", "gruyere", "brie", "camembert",
+        "sour cream", "clotted cream", "ghee",
+    ]),
+    ("Bakery & Bread", [
+        "bread", "naan", "tortilla", "pitta", "pita", "croissant", "baguette",
+        "flatbread", "ciabatta", "crouton", "croutons", "sourdough", "brioche",
+        "focaccia", "wrap", "wraps", "breadcrumb",
+    ]),
+    ("Pasta, Rice & Grains", [
+        "pasta", "spaghetti", "penne", "fusilli", "fusilloni", "rice", "noodle",
+        "noodles", "couscous", "quinoa", "orzo", "tortellini", "tortiglioni",
+        "gnocchi", "risoni", "tagliatelle", "linguine", "fettuccine", "lasagne",
+        "macaroni", "bulgur", "polenta", "oats", "flour", "cornflour",
+    ]),
+    ("Tins & Jars", [
+        "chopped tomatoes", "finely chopped tomatoes", "coconut milk", "passata",
+        "stock cube", "stock pot", "stock mix", "bouillon", "chickpeas", "lentils",
+        "kidney beans", "cannellini", "black beans", "baked beans", "coconut cream",
+        "tomato puree", "tomato paste", "harissa", "pesto", "tahini",
+    ]),
+    ("Herbs, Spices & Seasonings", [
+        "black pepper", "white pepper", "cumin", "paprika", "oregano", "basil",
+        "thyme", "rosemary", "parsley", "cinnamon", "turmeric", "chilli flakes",
+        "chili flakes", "bay leaf", "bay leaves", "nutmeg", "mixed herbs",
+        "dried herbs", "dried basil", "dried oregano", "italian seasoning",
+        "cardamom", "fennel seed", "mustard seed", "star anise", "sumac",
+        "garam masala", "curry powder", "five spice", "saffron", "dill",
+        "tarragon", "sage", "mixed spice", "seasoning", "sesame seeds",
+    ]),
+    ("Oils, Sauces & Condiments", [
+        "olive oil", "vegetable oil", "sesame oil", "coconut oil", "oil",
+        "vinegar", "balsamic", "soy sauce", "worcestershire", "mustard",
+        "ketchup", "mayonnaise", "honey", "maple syrup", "fish sauce",
+        "oyster sauce", "sriracha", "mirin",
+    ]),
+    ("Fruits & Vegetables", [
+        "onion", "garlic", "tomato", "tomatoes", "pepper", "peppers",
+        "courgette", "aubergine", "carrot", "potato", "potatoes",
+        "mushroom", "mushrooms", "lettuce", "spinach", "broccoli",
+        "cucumber", "avocado", "lemon", "lime", "apple", "berry",
+        "berries", "banana", "beetroot", "celery", "leek", "chilli",
+        "ginger", "sweet potato", "butternut", "squash", "cabbage",
+        "kale", "rocket", "watercress", "asparagus", "pea", "peas",
+        "green beans", "runner beans", "mange tout", "radish", "turnip",
+        "parsnip", "fennel", "spring onion", "shallot", "cherry tomatoes",
+        "plum", "pear", "orange", "mango", "pineapple", "peach", "fig",
+        "pomegranate", "raspberry", "strawberry", "blueberry", "cranberry",
+        "grape", "coriander", "mint", "chestnut",
+    ]),
+]
+
+_QUANTITY_UNIT_RE = _re.compile(
+    r'^\d[\d/.\s]*(kg|g|mg|lb|oz|l|ml|cl|tsp|tbsp|cup|cups|pint|pints|'
+    r'pinch|handful|bunch|slice|slices|can|cans|tin|tins|pack|packs|'
+    r'bag|bags|head|heads|clove|cloves|sprig|sprigs|sheet|sheets|'
+    r'stick|sticks|rasher|rashers)s?\b\.?\s*',
+    _re.IGNORECASE
+)
+
+
+def categorize_ingredient(text):
+    """Return the shopping category for an ingredient string."""
+    cleaned = _QUANTITY_UNIT_RE.sub('', text)
+    cleaned = _re.sub(r'^\d[\d/.\s]*\s+', '', cleaned)
+    cleaned = cleaned.lower().strip()
+    core = cleaned.split(',')[0].strip()
+
+    for category, keywords in INGREDIENT_CATEGORIES:
+        for kw in sorted(keywords, key=len, reverse=True):
+            if kw in core:
+                return category
+    return "Other"
+
+
 def get_shopping_list_for_range(start_date, end_date):
     """Aggregate all ingredients across calendar entries in the date range, scaled by servings."""
     conn = get_db()
     rows = conn.execute("""
-        SELECT r.ingredients, r.servings as recipe_servings, ce.servings as planned_servings
+        SELECT r.title as recipe_title, r.ingredients, r.servings as recipe_servings,
+               ce.servings as planned_servings
         FROM calendar_entries ce
         JOIN recipes r ON r.id = ce.recipe_id
         WHERE ce.entry_date >= ? AND ce.entry_date <= ?
               AND ce.recipe_id IS NOT NULL
     """, (start_date, end_date)).fetchall()
     conn.close()
-    all_ingredients = []
+    ingredient_map = {}  # ingredient_text -> list of recipe titles
+    ingredient_order = []  # preserve insertion order
     for row in rows:
+        recipe_title = row["recipe_title"]
         ingredients = json.loads(row["ingredients"])
         recipe_servings = _parse_servings(row["recipe_servings"])
         planned_servings = row["planned_servings"] or 2
         if recipe_servings and recipe_servings != planned_servings:
             ratio = planned_servings / recipe_servings
             ingredients = [_scale_ingredient(i, ratio) for i in ingredients]
-        all_ingredients.extend(ingredients)
-    return all_ingredients
+        for ing in ingredients:
+            if ing not in ingredient_map:
+                ingredient_map[ing] = []
+                ingredient_order.append(ing)
+            if recipe_title not in ingredient_map[ing]:
+                ingredient_map[ing].append(recipe_title)
+    return [{"text": ing, "recipes": ingredient_map[ing], "category": categorize_ingredient(ing)} for ing in ingredient_order]
 
 
 def _parse_servings(s):
@@ -219,4 +333,8 @@ def _scale_ingredient(ingredient, ratio):
         if scaled == int(scaled):
             return str(int(scaled))
         return f"{scaled:.1f}"
-    return _re.sub(r'\d+\.?\d*', _replace_num, ingredient, count=1)
+    result = _re.sub(r'\d+\.?\d*', _replace_num, ingredient, count=1)
+    if result == ingredient and not _re.search(r'\d', ingredient):
+        qty = str(int(ratio)) if ratio == int(ratio) else f"{ratio:.1f}"
+        return f"{qty} {ingredient}"
+    return result

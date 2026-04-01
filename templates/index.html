@@ -18,6 +18,7 @@
         <ul class="nav-links">
             <li><a href="#" class="nav-link active" data-view="meal-plans">📅 Calendar</a></li>
             <li><a href="#" class="nav-link" data-view="recipes">📖 Recipes</a></li>
+            <li><a href="#" class="nav-link" data-view="shopping">🛒 Shopping</a></li>
             <li><a href="#" class="nav-link" data-view="chat">🤖 AI Chef</a></li>
         </ul>
     </nav>
@@ -39,29 +40,45 @@
                 <button class="btn btn-ghost btn-small" id="cal-today" style="margin-left:12px">Today</button>
             </div>
             <div id="calendar-grid" class="calendar-month-grid"></div>
+        </section>
 
-            <!-- Shopping list -->
-            <div class="shopping-section" style="margin-top:32px">
-                <button class="btn btn-secondary" id="btn-shopping-list">🛒 Shopping List</button>
-                <div id="shopping-picker" class="hidden card" style="margin-top:12px;padding:16px">
-                    <h4>Select weeks</h4>
-                    <div id="shopping-weeks" class="shopping-weeks"></div>
-                    <div class="form-actions" style="margin-top:12px">
-                        <button class="btn btn-primary btn-small" id="btn-generate-shopping">Generate</button>
-                    </div>
-                </div>
-                <div id="shopping-list" class="hidden card" style="margin-top:12px">
-                    <div class="shopping-list-header">
-                        <h4>Shopping List</h4>
+        <!-- ═══ SHOPPING VIEW ═══ -->
+        <section id="view-shopping" class="view">
+            <div class="view-header">
+                <h2>Shopping List</h2>
+            </div>
+
+            <!-- Week navigator -->
+            <div class="shopping-week-nav">
+                <button class="btn btn-small" id="shopping-week-prev" title="Previous week">&#8249;</button>
+                <span id="shopping-date-range" class="shopping-date-range"></span>
+                <button class="btn btn-small" id="shopping-week-next" title="Next week">&#8250;</button>
+            </div>
+
+            <!-- Shopping list display -->
+            <div id="shopping-list-container" class="hidden">
+                <div class="shopping-list-header">
+                    <h4>Shopping List</h4>
+                    <div class="shopping-list-header-right">
                         <button class="btn btn-small btn-copy-list" id="btn-copy-shopping" title="Copy unchecked items to clipboard">
-                            📋 Copy to Clipboard
+                            📋 Copy
+                        </button>
+                        <button class="btn btn-small btn-clear-list" id="btn-clear-shopping" title="Clear all items">
+                            🗑️ Clear All
                         </button>
                     </div>
-                    <ul id="shopping-items"></ul>
-                    <div class="add-item-row">
-                        <input type="text" id="add-shopping-item" class="input" placeholder="Add an item…">
-                        <button class="btn btn-primary btn-small" id="btn-add-shopping-item">+ Add</button>
-                    </div>
+                </div>
+                <ul id="shopping-items" class="card" style="padding:12px"></ul>
+                <div class="add-item-row card" style="padding:12px;margin-top:12px">
+                    <input type="text" id="add-shopping-item" class="input" placeholder="Add an item…">
+                    <button class="btn btn-primary btn-small" id="btn-add-shopping-item">+ Add</button>
+                </div>
+            </div>
+
+            <div id="shopping-empty" class="hidden">
+                <div class="empty-state card" style="padding:48px 20px">
+                    <span class="emoji">🛒</span>
+                    <p>No ingredients this week.<br>Add some meals to your calendar first!</p>
                 </div>
             </div>
         </section>
@@ -79,7 +96,7 @@
                     <button class="btn btn-primary" id="btn-new-recipe">+ Add Recipe</button>
                 </div>
             </div>
-            <input type="file" id="paprika-file-input" accept=".paprikarecipes,.paprikarecipe" class="hidden">
+            <input type="file" id="paprika-file-input" accept=".paprikarecipes,.paprikarecipe,.xlsx,.xls" class="hidden">
 
             <!-- Category filter -->
             <div id="category-filter" class="category-filter-bar hidden">

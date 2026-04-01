@@ -30,6 +30,7 @@ $$(".nav-link").forEach((link) => {
         // Load data when switching views
         if (view === "meal-plans") loadCalendar();
         if (view === "recipes") loadRecipes();
+        if (view === "shopping") loadShoppingView();
     });
 });
 
@@ -182,14 +183,27 @@ async function loadRecipes() {
     });
 }
 
-async function openRecipeModal(id, entryId) {
+async function openRecipeModal(id, entryId, plannedServings) {
     const res = await fetch(`${API}/api/recipes/${id}`);
     const r = await res.json();
     const body = $("#modal-recipe-body");
 
+    const recipeServings = parseServings(r.servings);
+    const displayServings = plannedServings || recipeServings || null;
+    const ratio = (recipeServings && plannedServings && recipeServings !== plannedServings)
+        ? plannedServings / recipeServings : null;
+    const ingredients = ratio
+        ? r.ingredients.map((i) => scaleIngredient(i, ratio))
+        : r.ingredients;
+    const servingsLabel = displayServings
+        ? (ratio ? `· ${displayServings} servings (scaled)` : (r.servings ? "· " + r.servings : ""))
+        : "";
+
     const actionBtn = entryId
         ? `<button class="btn btn-danger btn-small" id="btn-remove-entry-modal" data-entry-id="${entryId}">Remove from Calendar</button>`
-        : `<button class="btn btn-danger btn-small" onclick="deleteRecipe(${r.id})">Delete Recipe</button>`;
+        : `<button class="btn btn-primary btn-small" id="btn-add-to-calendar-modal">📅 Add to Calendar</button>
+           <button class="btn btn-secondary btn-small" id="btn-edit-recipe-modal">✏️ Edit</button>
+           <button class="btn btn-danger btn-small" onclick="deleteRecipe(${r.id})">Delete Recipe</button>`;
 
     const hasMethods = r.instructions && r.instructions.length > 0;
     const cookBtn = hasMethods
@@ -199,12 +213,12 @@ async function openRecipeModal(id, entryId) {
     body.innerHTML = `
         ${r.image_url ? `<img class="modal-recipe-image" src="${r.image_url}" alt="">` : ""}
         <h2 class="modal-recipe-title">${escHtml(r.title)}</h2>
-        <p class="modal-recipe-meta">${r.total_time || ""} ${r.servings ? "· " + r.servings : ""} ${r.source_url ? `· <a href="${r.source_url}" target="_blank">Source ↗</a>` : ""}</p>
+        <p class="modal-recipe-meta">${r.total_time || ""} ${servingsLabel} ${r.source_url ? `· <a href="${r.source_url}" target="_blank">Source ↗</a>` : ""}</p>
         ${(r.categories || []).length > 0
             ? `<div class="modal-recipe-cats">${r.categories.map((c) => `<span class="cat-pill">${escHtml(c)}</span>`).join("")}</div>`
             : ""}
         <h4>Ingredients</h4>
-        <ul class="ingredient-list">${r.ingredients.map((i) => `<li>${escHtml(i)}</li>`).join("")}</ul>
+        <ul class="ingredient-list">${ingredients.map((i) => `<li>${escHtml(i)}</li>`).join("")}</ul>
         <h4>Method</h4>
         <ol class="instruction-list">${r.instructions.map((s) => `<li>${escHtml(s)}</li>`).join("")}</ol>
         <div class="modal-actions">
@@ -229,7 +243,110 @@ async function openRecipeModal(id, entryId) {
         });
     }
 
+    const addToCalBtn = body.querySelector("#btn-add-to-calendar-modal");
+    if (addToCalBtn) {
+        addToCalBtn.addEventListener("click", () => {
+            hide($("#recipe-modal"));
+            openAssignToCalendarModal(r.id, r.title, parseServings(r.servings) || 2);
+        });
+    }
+
+    const editBtn = body.querySelector("#btn-edit-recipe-modal");
+    if (editBtn) {
+        editBtn.addEventListener("click", () => {
+            showEditRecipeForm(r);
+        });
+    }
+
     show($("#recipe-modal"));
+}
+
+async function showEditRecipeForm(recipe) {
+    const body = $("#modal-recipe-body");
+    let editCategories = [...(recipe.categories || [])];
+
+    body.innerHTML = `
+        <h2 style="margin-top:0">Edit Recipe</h2>
+        <input type="text" id="edit-recipe-title" class="input" value="${escHtml(recipe.title)}" placeholder="Recipe title">
+        <div id="edit-category-area" style="margin:8px 0">
+            <div id="edit-category-tags" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px"></div>
+            <input type="text" id="edit-category-input" class="input" placeholder="Add a category…" style="font-size:13px">
+        </div>
+        <input type="text" id="edit-recipe-servings" class="input" value="${escHtml(recipe.servings || "")}" placeholder="Servings (e.g. 4 servings)">
+        <input type="text" id="edit-recipe-time" class="input" value="${escHtml(recipe.total_time || "")}" placeholder="Total time (e.g. 30 min)">
+        <textarea id="edit-recipe-ingredients" class="input textarea" rows="8" placeholder="Ingredients (one per line)">${escHtml(recipe.ingredients.join("\n"))}</textarea>
+        <textarea id="edit-recipe-instructions" class="input textarea" rows="8" placeholder="Instructions (one step per line)">${escHtml(recipe.instructions.join("\n"))}</textarea>
+        <div class="form-actions" style="margin-top:12px">
+            <button class="btn btn-primary" id="btn-save-edit-recipe">Save Changes</button>
+            <button class="btn btn-ghost" id="btn-cancel-edit-recipe">Cancel</button>
+        </div>`;
+
+    function renderEditTags() {
+        const container = body.querySelector("#edit-category-tags");
+        container.innerHTML = editCategories.map((c) =>
+            `<span class="cat-pill">${escHtml(c)} <button class="edit-cat-remove" data-cat="${escHtml(c)}">&times;</button></span>`
+        ).join("");
+        container.querySelectorAll(".edit-cat-remove").forEach((btn) => {
+            btn.addEventListener("click", (e) => {
+                e.preventDefault();
+                editCategories = editCategories.filter((c) => c !== btn.dataset.cat);
+                renderEditTags();
+            });
+        });
+    }
+    renderEditTags();
+
+    const catInput = body.querySelector("#edit-category-input");
+    catInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === ",") {
+            e.preventDefault();
+            const val = catInput.value.replace(",", "").trim();
+            if (val && !editCategories.includes(val)) {
+                editCategories.push(val);
+                renderEditTags();
+            }
+            catInput.value = "";
+        }
+    });
+
+    body.querySelector("#btn-cancel-edit-recipe").addEventListener("click", () => {
+        openRecipeModal(recipe.id);
+    });
+
+    body.querySelector("#btn-save-edit-recipe").addEventListener("click", async () => {
+        const title = body.querySelector("#edit-recipe-title").value.trim();
+        const ingredients = body.querySelector("#edit-recipe-ingredients").value.split("\n").filter((l) => l.trim());
+        const instructions = body.querySelector("#edit-recipe-instructions").value.split("\n").filter((l) => l.trim());
+        const servings = body.querySelector("#edit-recipe-servings").value.trim() || null;
+        const totalTime = body.querySelector("#edit-recipe-time").value.trim() || null;
+
+        if (!title || ingredients.length === 0) {
+            alert("Please provide a title and at least one ingredient.");
+            return;
+        }
+
+        const saveBtn = body.querySelector("#btn-save-edit-recipe");
+        saveBtn.disabled = true;
+        saveBtn.textContent = "Saving…";
+
+        await fetch(`${API}/api/recipes/${recipe.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                title,
+                ingredients,
+                instructions,
+                servings,
+                total_time: totalTime,
+                categories: editCategories,
+                source_url: recipe.source_url,
+                image_url: recipe.image_url,
+            }),
+        });
+
+        openRecipeModal(recipe.id);
+        loadRecipes();
+    });
 }
 
 $("#btn-close-modal").addEventListener("click", () => hide($("#recipe-modal")));
@@ -336,7 +453,7 @@ catInput.addEventListener("keydown", (e) => {
     }
 });
 
-// Import from file (.paprikarecipes)
+// Import from file (.paprikarecipes, .xlsx)
 $("#btn-import-file").addEventListener("click", () => {
     $("#paprika-file-input").click();
 });
@@ -345,8 +462,10 @@ $("#paprika-file-input").addEventListener("change", async (e) => {
     if (!file) return;
     const formData = new FormData();
     formData.append("file", file);
+    const isExcel = file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
+    const endpoint = isExcel ? `${API}/api/import-excel` : `${API}/api/import-paprika`;
     try {
-        const res = await fetch(`${API}/api/import-paprika`, { method: "POST", body: formData });
+        const res = await fetch(endpoint, { method: "POST", body: formData });
         const data = await res.json();
         if (data.error) {
             alert(`Import error: ${data.error}`);
@@ -593,7 +712,7 @@ async function loadCalendar() {
                     html += `<div class="cal-entry" draggable="true"
                                   data-entry-id="${e.id}" data-entry-type="recipe"
                                   data-recipe-id="${e.recipe_id}">
-                        <a href="#" class="cal-entry-link" data-recipe-id="${e.recipe_id}" data-entry-id="${e.id}">${escHtml(e.recipe_title)}</a>
+                        <a href="#" class="cal-entry-link" data-recipe-id="${e.recipe_id}" data-entry-id="${e.id}" data-servings="${e.servings}">${escHtml(e.recipe_title)}</a>
                         <span class="cal-entry-srv">${e.servings}srv</span>
                         <span class="cal-entry-actions">
                             <button class="cal-entry-copy" data-entry-id="${e.id}" title="Copy to…">📋</button>
@@ -640,7 +759,8 @@ async function loadCalendar() {
             ev.stopPropagation();
             const recipeId = link.dataset.recipeId;
             const entryId = link.dataset.entryId;
-            if (recipeId) openRecipeModal(recipeId, entryId);
+            const servings = link.dataset.servings ? parseInt(link.dataset.servings) : null;
+            if (recipeId) openRecipeModal(recipeId, entryId, servings);
         });
     });
 
@@ -736,8 +856,6 @@ async function loadCalendar() {
         });
     });
 
-    // Render shopping week picker
-    renderShoppingWeeks();
 }
 
 // Calendar navigation
@@ -753,6 +871,111 @@ $("#cal-today").addEventListener("click", () => {
     calendarMonth = new Date();
     loadCalendar();
 });
+
+// ── Assign recipe to calendar modal ──
+function openAssignToCalendarModal(recipeId, title, defaultServings) {
+    let viewDate = new Date();
+
+    function renderGrid(modal) {
+        const year = viewDate.getFullYear();
+        const month = viewDate.getMonth();
+        const gridDates = getCalendarGridDates(year, month);
+        const monthDates = gridDates.filter(d => d.getMonth() === month);
+        const uniqueDates = [...new Set(monthDates.map(d => isoDate(d)))];
+        const monthLabel = viewDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+
+        modal.querySelector(".modal-inner").innerHTML = `
+            <h3>Add to Calendar</h3>
+            <p class="copy-hint">${escHtml(title)}</p>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                <button class="btn btn-small assign-prev">&#8249;</button>
+                <strong>${monthLabel}</strong>
+                <button class="btn btn-small assign-next">&#8250;</button>
+            </div>
+            <div class="copy-grid">
+                ${uniqueDates.map((date) => {
+                    const d = new Date(date + "T00:00:00");
+                    const label = d.toLocaleDateString(undefined, { weekday: "short", day: "numeric" });
+                    return `
+                    <div class="copy-day">
+                        <strong>${label}</strong>
+                        ${MEALS.map((meal) => `
+                            <button class="btn btn-secondary copy-target" data-day="${date}" data-meal="${meal}">
+                                ${meal}
+                            </button>`).join("")}
+                    </div>`;
+                }).join("")}
+            </div>
+            <div class="form-actions" style="margin-top:16px">
+                <button class="btn btn-ghost cancel-add">Cancel</button>
+            </div>`;
+
+        modal.querySelector(".assign-prev").addEventListener("click", () => {
+            viewDate.setMonth(viewDate.getMonth() - 1);
+            renderGrid(modal);
+        });
+        modal.querySelector(".assign-next").addEventListener("click", () => {
+            viewDate.setMonth(viewDate.getMonth() + 1);
+            renderGrid(modal);
+        });
+        modal.querySelector(".cancel-add").addEventListener("click", () => modal.remove());
+
+        modal.querySelectorAll(".copy-target").forEach((btn) => {
+            btn.addEventListener("click", () => {
+                const day = btn.dataset.day;
+                const meal = btn.dataset.meal;
+                const dayLabel = new Date(day + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" });
+
+                modal.querySelector(".modal-inner").innerHTML = `
+                    <h3>${escHtml(title)}</h3>
+                    <p class="copy-hint">${dayLabel} · ${meal}</p>
+                    <p class="servings-prompt">How many servings?</p>
+                    <div class="servings-picker">
+                        <button class="btn btn-secondary servings-dec">&minus;</button>
+                        <span class="servings-value">${defaultServings}</span>
+                        <button class="btn btn-secondary servings-inc">+</button>
+                    </div>
+                    <div class="form-actions" style="margin-top:16px">
+                        <button class="btn btn-primary confirm-assign">Add to Calendar</button>
+                        <button class="btn btn-ghost cancel-add">Cancel</button>
+                    </div>`;
+
+                const valEl = modal.querySelector(".servings-value");
+                modal.querySelector(".servings-dec").addEventListener("click", () => {
+                    const v = parseInt(valEl.textContent);
+                    if (v > 1) valEl.textContent = v - 1;
+                });
+                modal.querySelector(".servings-inc").addEventListener("click", () => {
+                    valEl.textContent = parseInt(valEl.textContent) + 1;
+                });
+                modal.querySelector(".cancel-add").addEventListener("click", () => modal.remove());
+                modal.querySelector(".confirm-assign").addEventListener("click", async () => {
+                    modal.querySelector(".confirm-assign").disabled = true;
+                    modal.querySelector(".confirm-assign").textContent = "Adding…";
+                    await fetch(`${API}/api/calendar/entries`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            recipe_id: recipeId,
+                            entry_date: day,
+                            meal_type: meal,
+                            servings: parseInt(valEl.textContent),
+                        }),
+                    });
+                    modal.remove();
+                    loadCalendar();
+                });
+            });
+        });
+    }
+
+    const modal = document.createElement("div");
+    modal.className = "add-meal-modal";
+    modal.innerHTML = `<div class="modal-inner"></div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener("click", (e) => { if (e.target === modal) modal.remove(); });
+    renderGrid(modal);
+}
 
 // ── Copy-to picker modal ──
 function openCopyModal(entryId) {
@@ -952,84 +1175,134 @@ function parseServings(s) {
     return m ? parseInt(m[1]) : null;
 }
 
-// ── Shopping list ──
-function renderShoppingWeeks() {
-    const year = calendarMonth.getFullYear();
-    const month = calendarMonth.getMonth();
-    const gridDates = getCalendarGridDates(year, month);
-    const monthDates = gridDates.filter(d => d.getMonth() === month);
-
-    // Group by ISO week (Mon-Sun)
-    const weeks = [];
-    let currentWeek = [];
-    monthDates.forEach((d, i) => {
-        currentWeek.push(d);
-        const dayOfWeek = d.getDay() === 0 ? 6 : d.getDay() - 1; // Mon=0
-        if (dayOfWeek === 6 || i === monthDates.length - 1) {
-            weeks.push([...currentWeek]);
-            currentWeek = [];
-        }
+function scaleIngredient(text, ratio) {
+    let replaced = false;
+    const result = text.replace(/\d+\.?\d*/, (match) => {
+        if (replaced) return match;
+        replaced = true;
+        const scaled = parseFloat(match) * ratio;
+        return scaled === Math.floor(scaled) ? String(Math.floor(scaled)) : scaled.toFixed(1);
     });
-
-    const container = $("#shopping-weeks");
-    container.innerHTML = weeks.map((w, i) => {
-        const start = w[0];
-        const end = w[w.length - 1];
-        const startLabel = start.toLocaleDateString(undefined, { day: "numeric", month: "short" });
-        const endLabel = end.toLocaleDateString(undefined, { day: "numeric", month: "short" });
-        return `<label class="shopping-week-check">
-            <input type="checkbox" data-start="${isoDate(start)}" data-end="${isoDate(end)}" checked>
-            <span>Week ${i+1}: ${startLabel} – ${endLabel}</span>
-        </label>`;
-    }).join("");
+    if (!replaced) {
+        const qty = ratio === Math.floor(ratio) ? String(Math.floor(ratio)) : ratio.toFixed(1);
+        return `${qty} ${text}`;
+    }
+    return result;
 }
 
-$("#btn-shopping-list").addEventListener("click", () => {
-    const picker = $("#shopping-picker");
-    const list = $("#shopping-list");
-    if (picker.classList.contains("hidden")) {
-        show(picker);
-        hide(list);
-    } else {
-        hide(picker);
-    }
-});
+// ── Shopping list ──
+const CATEGORY_ORDER = [
+    "Fruits & Vegetables", "Meat & Fish", "Dairy & Eggs", "Bakery & Bread",
+    "Pasta, Rice & Grains", "Tins & Jars", "Oils, Sauces & Condiments",
+    "Herbs, Spices & Seasonings", "Other",
+];
 
-$("#btn-generate-shopping").addEventListener("click", async () => {
-    const checks = $$("#shopping-weeks input[type=checkbox]:checked");
-    if (checks.length === 0) {
-        alert("Please select at least one week.");
-        return;
-    }
-    // Find min start and max end
-    let minStart = null, maxEnd = null;
-    checks.forEach((cb) => {
-        const s = cb.dataset.start;
-        const e = cb.dataset.end;
-        if (!minStart || s < minStart) minStart = s;
-        if (!maxEnd || e > maxEnd) maxEnd = e;
-    });
+let shoppingWeekOffset = 1; // default to next week
 
-    const res = await fetch(`${API}/api/shopping-list?start=${minStart}&end=${maxEnd}`);
-    const items = await res.json();
+function getWeekRange(offset) {
+    const now = new Date();
+    const day = now.getDay();
+    const diffToMon = day === 0 ? -6 : 1 - day;
+    const mon = new Date(now);
+    mon.setDate(now.getDate() + diffToMon + (offset * 7));
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+    return { start: isoDate(mon), end: isoDate(sun) };
+}
+
+function formatWeekLabel(start, end) {
+    const s = new Date(start + "T00:00:00");
+    const e = new Date(end + "T00:00:00");
+    const sLabel = s.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+    const eLabel = e.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+    return `${sLabel} – ${eLabel}`;
+}
+
+function renderShoppingList(items) {
     const list = $("#shopping-items");
     if (items.length === 0) {
-        list.innerHTML = "<li>No ingredients – add some meals to your calendar first!</li>";
-    } else {
-        list.innerHTML = items.map((i) =>
-            `<li><label class="shopping-item"><input type="checkbox"><span>${escHtml(i)}</span></label></li>`
-        ).join("");
+        hide($("#shopping-list-container"));
+        show($("#shopping-empty"));
+        return;
     }
-    hide($("#shopping-picker"));
-    show($("#shopping-list"));
+    hide($("#shopping-empty"));
+    const grouped = {};
+    items.forEach((item) => {
+        const cat = item.category || "Other";
+        if (!grouped[cat]) grouped[cat] = [];
+        grouped[cat].push(item);
+    });
+    let html = "";
+    for (const cat of CATEGORY_ORDER) {
+        if (!grouped[cat] || grouped[cat].length === 0) continue;
+        html += `<li class="shopping-category-header" data-category="${escHtml(cat)}"><span class="shopping-category-left"><span class="shopping-category-chevron">&#9662;</span><span class="shopping-category-name">${escHtml(cat)}</span></span><span class="shopping-category-count">${grouped[cat].length}</span></li>`;
+        html += grouped[cat].map((item) => {
+            const text = item.text;
+            const recipes = item.recipes || [];
+            const ocadoUrl = ocadoSearchUrl(text);
+            const recipeAttr = recipes.length > 0
+                ? `<span class="shopping-recipe-attr">${escHtml(recipes.join(", "))}</span>`
+                : "";
+            return `<li data-category="${escHtml(cat)}"><label class="shopping-item"><input type="checkbox"><span class="shopping-item-content"><span class="shopping-item-text">${escHtml(text)}</span>${recipeAttr}</span></label><a class="ocado-link" href="${ocadoUrl}" target="_blank" rel="noopener noreferrer" title="Search on Ocado"><img src="https://www.ocado.com/favicon.ico" alt="Ocado" class="ocado-icon"></a></li>`;
+        }).join("");
+    }
+    list.innerHTML = html;
+    show($("#shopping-list-container"));
+}
+
+async function loadShoppingView() {
+    const { start, end } = getWeekRange(shoppingWeekOffset);
+    const label = shoppingWeekOffset === 0 ? "This week" : shoppingWeekOffset === 1 ? "Next week" : null;
+    const rangeText = formatWeekLabel(start, end);
+    $("#shopping-date-range").textContent = label ? `${label}: ${rangeText}` : rangeText;
+
+    const res = await fetch(`${API}/api/shopping-list?start=${start}&end=${end}`);
+    const items = await res.json();
+    renderShoppingList(items);
+}
+
+$("#shopping-week-prev").addEventListener("click", () => { shoppingWeekOffset--; loadShoppingView(); });
+$("#shopping-week-next").addEventListener("click", () => { shoppingWeekOffset++; loadShoppingView(); });
+
+// Toggle category collapse
+$("#shopping-items").addEventListener("click", (e) => {
+    const header = e.target.closest(".shopping-category-header");
+    if (!header) return;
+    const cat = header.dataset.category;
+    header.classList.toggle("collapsed");
+    const list = $("#shopping-items");
+    list.querySelectorAll(`li[data-category="${CSS.escape(cat)}"]:not(.shopping-category-header)`).forEach((li) => {
+        li.classList.toggle("category-hidden");
+    });
 });
 
 // Add custom item to shopping list
 function addShoppingItem(text) {
     if (!text.trim()) return;
+    const list = $("#shopping-items");
+    const ocadoUrl = ocadoSearchUrl(text.trim());
     const li = document.createElement("li");
-    li.innerHTML = `<label class="shopping-item"><input type="checkbox"><span>${escHtml(text.trim())}</span></label>`;
-    $("#shopping-items").appendChild(li);
+    li.dataset.category = "Other";
+    li.innerHTML = `<label class="shopping-item"><input type="checkbox"><span class="shopping-item-content"><span class="shopping-item-text">${escHtml(text.trim())}</span></span></label><a class="ocado-link" href="${ocadoUrl}" target="_blank" rel="noopener noreferrer" title="Search on Ocado"><img src="https://www.ocado.com/favicon.ico" alt="Ocado" class="ocado-icon"></a>`;
+
+    let otherHeader = list.querySelector('.shopping-category-header[data-category="Other"]');
+    if (!otherHeader) {
+        otherHeader = document.createElement("li");
+        otherHeader.className = "shopping-category-header";
+        otherHeader.dataset.category = "Other";
+        otherHeader.innerHTML = `<span class="shopping-category-left"><span class="shopping-category-chevron">&#9662;</span><span class="shopping-category-name">Other</span></span><span class="shopping-category-count">0</span>`;
+        list.appendChild(otherHeader);
+    }
+
+    const otherItems = [...list.querySelectorAll('li[data-category="Other"]:not(.shopping-category-header)')];
+    if (otherItems.length > 0) {
+        otherItems[otherItems.length - 1].after(li);
+    } else {
+        otherHeader.after(li);
+    }
+
+    const count = list.querySelectorAll('li[data-category="Other"]:not(.shopping-category-header)').length;
+    otherHeader.querySelector(".shopping-category-count").textContent = count;
 }
 
 $("#btn-add-shopping-item").addEventListener("click", () => {
@@ -1049,29 +1322,56 @@ $("#add-shopping-item").addEventListener("keydown", (e) => {
 
 // Copy shopping list to clipboard
 $("#btn-copy-shopping").addEventListener("click", async () => {
-    const items = [];
-    $("#shopping-items").querySelectorAll(".shopping-item").forEach((label) => {
-        const cb = label.querySelector("input[type=checkbox]");
-        if (!cb.checked) items.push(label.querySelector("span").textContent);
+    const lines = [];
+    let currentCategory = null;
+    let categoryHasItems = false;
+
+    $("#shopping-items").querySelectorAll("li").forEach((li) => {
+        if (li.classList.contains("shopping-category-header")) {
+            currentCategory = li.querySelector(".shopping-category-name").textContent;
+            categoryHasItems = false;
+        } else {
+            const label = li.querySelector(".shopping-item");
+            if (!label) return;
+            const cb = label.querySelector("input[type=checkbox]");
+            if (!cb.checked) {
+                if (currentCategory && !categoryHasItems) {
+                    if (lines.length > 0) lines.push("");
+                    lines.push(`--- ${currentCategory} ---`);
+                    categoryHasItems = true;
+                }
+                lines.push(label.querySelector(".shopping-item-text").textContent);
+            }
+        }
     });
-    if (items.length === 0) {
+
+    const itemCount = lines.filter(l => l && !l.startsWith("---")).length;
+    if (itemCount === 0) {
         $("#btn-copy-shopping").textContent = "✅ All done!";
-        setTimeout(() => $("#btn-copy-shopping").textContent = "📋 Copy to Clipboard", 2000);
+        setTimeout(() => $("#btn-copy-shopping").textContent = "📋 Copy", 2000);
         return;
     }
+    const text = lines.join("\n");
     try {
-        await navigator.clipboard.writeText(items.join("\n"));
-        $("#btn-copy-shopping").textContent = `✅ ${items.length} items copied!`;
+        await navigator.clipboard.writeText(text);
+        $("#btn-copy-shopping").textContent = `✅ ${itemCount} items copied!`;
     } catch {
         const ta = document.createElement("textarea");
-        ta.value = items.join("\n");
+        ta.value = text;
         document.body.appendChild(ta);
         ta.select();
         document.execCommand("copy");
         document.body.removeChild(ta);
-        $("#btn-copy-shopping").textContent = `✅ ${items.length} items copied!`;
+        $("#btn-copy-shopping").textContent = `✅ ${itemCount} items copied!`;
     }
-    setTimeout(() => $("#btn-copy-shopping").textContent = "📋 Copy to Clipboard", 2500);
+    setTimeout(() => $("#btn-copy-shopping").textContent = "📋 Copy", 2500);
+});
+
+// Clear all shopping list items
+$("#btn-clear-shopping").addEventListener("click", () => {
+    $("#shopping-items").innerHTML = "";
+    hide($("#shopping-list-container"));
+    show($("#shopping-empty"));
 });
 
 // ═══════════════════════════════════
@@ -1786,6 +2086,20 @@ async function fetchRecipeImage(sourceUrl, onSuccess, onError) {
 // ═══════════════════════════════════
 // Utility
 // ═══════════════════════════════════
+
+function ingredientToOcadoQuery(ingredient) {
+    // Strip leading quantity + unit so Ocado gets just the ingredient name
+    // e.g. "200g chicken breast" → "chicken breast", "2 tbsp olive oil" → "olive oil"
+    const cleaned = ingredient
+        .replace(/^\d+[\d\/\.\s]*(kg|g|mg|lb|oz|l|ml|cl|tsp|tbsp|cup|cups|pint|pints|pinch|handful|bunch|slice|slices|can|cans|tin|tins|pack|packs|bag|bags|head|heads|clove|cloves|sprig|sprigs|sheet|sheets|stick|sticks|rasher|rashers)s?\b\.?\s*/i, "")
+        .replace(/^\d+[\d\/\.\s]*\s+/, "")
+        .trim();
+    return cleaned || ingredient.trim();
+}
+
+function ocadoSearchUrl(ingredient) {
+    return `https://www.ocado.com/search?q=${ingredientToOcadoQuery(ingredient).replace(/\s+/g, "+")}`;
+}
 
 function escHtml(str) {
     if (!str) return "";
