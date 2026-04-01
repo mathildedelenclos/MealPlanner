@@ -18,6 +18,44 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key")
 
+
+def _split_instructions(text):
+    """Split a block of instruction text into individual steps."""
+    if not text or not text.strip():
+        return []
+    text = text.strip()
+
+    # Already delimited by ||
+    if "||" in text:
+        steps = [s.strip() for s in text.split("||") if s.strip()]
+        return [re.sub(r'^Step\s+\d+\s*:\s*', '', s) for s in steps]
+
+    # "Step 1: ... Step 2: ..." pattern
+    if re.search(r'Step\s+\d+\s*:', text):
+        steps = [s.strip() for s in re.split(r'(?=Step\s+\d+\s*:)', text) if s.strip()]
+        return [re.sub(r'^Step\s+\d+\s*:\s*', '', s) for s in steps]
+
+    # Numbered steps: "1. ... 2. ..." or "1) ... 2) ..."
+    if re.search(r'(?:^|\n)\s*\d+[\.\)]\s', text):
+        steps = re.split(r'\n\s*(?=\d+[\.\)]\s)', text)
+        steps = [re.sub(r'^\d+[\.\)]\s*', '', s).strip() for s in steps if s.strip()]
+        if len(steps) > 1:
+            return steps
+
+    # Double newline separated paragraphs
+    if "\n\n" in text:
+        steps = [s.strip() for s in text.split("\n\n") if s.strip()]
+        if len(steps) > 1:
+            return steps
+
+    # Single newline separated (if lines are substantial)
+    if "\n" in text:
+        lines = [l.strip() for l in text.split("\n") if l.strip()]
+        if len(lines) > 1 and all(len(l) > 15 for l in lines):
+            return lines
+
+    return [text]
+
 # Initialise the database on startup
 models.init_db()
 
@@ -312,11 +350,7 @@ def api_import_excel():
 
             # Instructions: split on || or "Step N:" boundaries, then clean prefixes
             method_raw = str(col(row, "method", "instructions", "directions"))
-            if "||" in method_raw:
-                steps = [s.strip() for s in method_raw.split("||") if s.strip()]
-            else:
-                steps = [s.strip() for s in re.split(r'(?=Step\s+\d+\s*:)', method_raw) if s.strip()]
-            instructions = [re.sub(r'^Step\s+\d+\s*:\s*', '', s) for s in steps]
+            instructions = _split_instructions(method_raw)
 
             # Cook time / total time
             total_time_raw = col(row, "total time", "total_time")
@@ -462,6 +496,25 @@ def api_shopping_list():
         return jsonify({"error": "start and end dates are required"}), 400
     items = models.get_shopping_list_for_range(start, end)
     return jsonify(items)
+
+
+@app.route("/api/fix-instructions", methods=["POST"])
+def api_fix_instructions():
+    """Re-split recipes that have all instructions in a single step."""
+    conn = models.get_db()
+    rows = conn.execute("SELECT id, instructions FROM recipes").fetchall()
+    fixed = 0
+    for row in rows:
+        instr = json.loads(row["instructions"])
+        if len(instr) == 1 and len(instr[0]) > 80:
+            new_steps = _split_instructions(instr[0])
+            if len(new_steps) > 1:
+                conn.execute("UPDATE recipes SET instructions = ? WHERE id = ?",
+                             (json.dumps(new_steps), row["id"]))
+                fixed += 1
+    conn.commit()
+    conn.close()
+    return jsonify({"fixed": fixed})
 
 
 @app.route("/api/generate-meal-plan", methods=["POST"])

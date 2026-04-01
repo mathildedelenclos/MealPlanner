@@ -308,8 +308,11 @@ def get_shopping_list_for_range(start_date, end_date):
               AND ce.recipe_id IS NOT NULL
     """, (start_date, end_date)).fetchall()
     conn.close()
-    ingredient_map = {}  # ingredient_text -> list of recipe titles
-    ingredient_order = []  # preserve insertion order
+
+    # Merge map: normalised_name -> { qty, unit, raw_name, recipes }
+    merge_map = {}   # key -> { qty: float|None, unit: str|None, name: str, recipes: [] }
+    merge_order = [] # preserve first-seen order of keys
+
     for row in rows:
         recipe_title = row["recipe_title"]
         ingredients = json.loads(row["ingredients"])
@@ -318,13 +321,137 @@ def get_shopping_list_for_range(start_date, end_date):
         if recipe_servings and recipe_servings != planned_servings:
             ratio = planned_servings / recipe_servings
             ingredients = [_scale_ingredient(i, ratio) for i in ingredients]
+
         for ing in ingredients:
-            if ing not in ingredient_map:
-                ingredient_map[ing] = []
-                ingredient_order.append(ing)
-            if recipe_title not in ingredient_map[ing]:
-                ingredient_map[ing].append(recipe_title)
-    return [{"text": ing, "recipes": ingredient_map[ing], "category": categorize_ingredient(ing)} for ing in ingredient_order]
+            qty, unit, name = _parse_ingredient(ing)
+            norm = _normalise_name(name)
+            if not norm:
+                norm = ing.strip().lower()
+                name = ing.strip()
+
+            # Use unit-qualified key so "400g tomatoes" and "1 can tomatoes" stay separate
+            unit_key = (unit or "").lower()
+            key = f"{norm}||{unit_key}"
+
+            if key not in merge_map:
+                merge_map[key] = {"qty": None, "unit": unit, "name": name, "recipes": []}
+                merge_order.append(key)
+
+            entry = merge_map[key]
+            if qty is not None:
+                if entry["qty"] is not None:
+                    entry["qty"] += qty
+                else:
+                    entry["qty"] = qty
+                    entry["unit"] = unit
+            if recipe_title not in entry["recipes"]:
+                entry["recipes"].append(recipe_title)
+
+    results = []
+    for key in merge_order:
+        entry = merge_map[key]
+        text = _format_ingredient(entry["qty"], entry["unit"], entry["name"])
+        results.append({
+            "text": text,
+            "recipes": entry["recipes"],
+            "category": categorize_ingredient(entry["name"]),
+        })
+    return results
+
+
+# Regex to parse "2 tbsp olive oil" → (2.0, "tbsp", "olive oil")
+_INGREDIENT_PARSE_RE = _re.compile(
+    r'^(\d[\d/.\s]*)\s*'
+    r'(kg|g|mg|lb|oz|l|ml|cl|tsp|tbsp|cup|cups|pint|pints|'
+    r'pinch|handful|bunch|slice|slices|can|cans|tin|tins|pack|packs|'
+    r'bag|bags|head|heads|clove|cloves|sprig|sprigs|sheet|sheets|'
+    r'stick|sticks|rasher|rashers)s?\b\.?\s*(.*)',
+    _re.IGNORECASE
+)
+
+# Simpler: "2 onions" → (2.0, None, "onions")
+_INGREDIENT_PLAIN_QTY_RE = _re.compile(
+    r'^(\d[\d/.\s]*)\s+(.*)'
+)
+
+
+def _parse_fraction(s):
+    """Parse a number string that may contain fractions like '1/2' or '1 1/2'."""
+    s = s.strip()
+    parts = s.split()
+    total = 0.0
+    for part in parts:
+        if '/' in part:
+            nums = part.split('/')
+            try:
+                total += float(nums[0]) / float(nums[1])
+            except (ValueError, ZeroDivisionError):
+                pass
+        else:
+            try:
+                total += float(part)
+            except ValueError:
+                pass
+    return total if total > 0 else None
+
+
+def _parse_ingredient(text):
+    """Parse an ingredient string into (quantity, unit, name). Any part may be None."""
+    text = text.strip()
+    m = _INGREDIENT_PARSE_RE.match(text)
+    if m:
+        qty = _parse_fraction(m.group(1))
+        unit = m.group(2).lower().rstrip('s').rstrip('.')
+        name = m.group(3).strip()
+        name = _re.sub(r'^of\s+', '', name)
+        return qty, unit, name if name else text
+
+    m = _INGREDIENT_PLAIN_QTY_RE.match(text)
+    if m:
+        qty = _parse_fraction(m.group(1))
+        name = m.group(2).strip()
+        return qty, None, name
+
+    return None, None, text
+
+
+def _normalise_name(name):
+    """Normalise an ingredient name for matching: lowercase, strip trailing commas and prep notes."""
+    if not name:
+        return ""
+    n = name.lower().strip()
+    # Strip trailing prep e.g. ", diced" / ", finely chopped"
+    n = _re.split(r',\s', n)[0]
+    # Strip leading "of " (from "of olive oil")
+    n = _re.sub(r'^of\s+', '', n)
+    # Basic plural → singular: "onions" → "onion", "tomatoes" → "tomato"
+    if len(n) > 3:
+        if n.endswith('oes'):
+            n = n[:-2]       # tomatoes → tomato
+        elif n.endswith('ies'):
+            n = n[:-3] + 'y' # berries → berry
+        elif n.endswith('s') and not n.endswith('ss'):
+            n = n[:-1]       # onions → onion
+    return n.strip()
+
+
+def _units_compatible(u1, u2):
+    """Check if two units can be summed directly."""
+    if u1 == u2:
+        return True
+    if u1 is None or u2 is None:
+        return True
+    return False
+
+
+def _format_ingredient(qty, unit, name):
+    """Reconstruct an ingredient string from parts."""
+    if qty is None:
+        return name
+    q = int(qty) if qty == int(qty) else round(qty, 1)
+    if unit:
+        return f"{q} {unit} {name}"
+    return f"{q} {name}"
 
 
 def _parse_servings(s):
