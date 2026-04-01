@@ -553,6 +553,23 @@ body {
     font-weight: 600;
     color: var(--text);
 }
+.sort-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-muted);
+    font-weight: 500;
+    white-space: nowrap;
+    margin-left: auto;
+}
+.input-select {
+    padding: 6px 10px;
+    font-size: 13px;
+    min-width: 0;
+    width: auto;
+    cursor: pointer;
+}
 #time-slider {
     width: 140px;
     accent-color: var(--primary);

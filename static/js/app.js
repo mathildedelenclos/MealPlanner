@@ -42,6 +42,7 @@ let currentCategoryFilter = "all";
 let currentSearchQuery = "";
 let recipeViewMode = "grid"; // "grid" or "list"
 let maxTimeFilter = null; // null = any, else max minutes
+let currentSort = "newest"; // newest | oldest | a-z | z-a | time-asc | time-desc
 let selectedRecipeIds = new Set();
 
 $("#btn-toggle-view").addEventListener("click", () => {
@@ -86,6 +87,11 @@ $("#recipe-search").addEventListener("input", (() => {
         }, 250);
     };
 })());
+
+$("#recipe-sort").addEventListener("change", (e) => {
+    currentSort = e.target.value;
+    loadRecipes();
+});
 
 async function loadRecipes() {
     const [recipesRes, catsRes] = await Promise.all([
@@ -137,6 +143,32 @@ async function loadRecipes() {
             return mins !== null && mins <= maxTimeFilter;
         });
     }
+
+    // Sort
+    filtered.sort((a, b) => {
+        switch (currentSort) {
+            case "oldest":  return a.id - b.id;
+            case "a-z":     return a.title.localeCompare(b.title);
+            case "z-a":     return b.title.localeCompare(a.title);
+            case "time-asc": {
+                const ma = parseTotalTimeMinutes(a.total_time);
+                const mb = parseTotalTimeMinutes(b.total_time);
+                if (ma === null && mb === null) return 0;
+                if (ma === null) return 1;
+                if (mb === null) return -1;
+                return ma - mb;
+            }
+            case "time-desc": {
+                const ma = parseTotalTimeMinutes(a.total_time);
+                const mb = parseTotalTimeMinutes(b.total_time);
+                if (ma === null && mb === null) return 0;
+                if (ma === null) return 1;
+                if (mb === null) return -1;
+                return mb - ma;
+            }
+            default:        return b.id - a.id; // newest
+        }
+    });
 
     if (filtered.length === 0) {
         const msg = recipes.length === 0
