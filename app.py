@@ -129,7 +129,11 @@ def login_page():
 
 @app.route("/auth/google")
 def auth_google():
-    redirect_uri = url_for("auth_callback", _external=True)
+    base_url = os.getenv("BASE_URL")
+    if base_url:
+        redirect_uri = base_url.rstrip("/") + "/auth/callback"
+    else:
+        redirect_uri = url_for("auth_callback", _external=True)
     return oauth.google.authorize_redirect(redirect_uri)
 
 
