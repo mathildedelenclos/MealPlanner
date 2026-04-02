@@ -685,10 +685,11 @@ class TestMigrationRecovery:
 
     # ── step 1: confirm the bug is reproducible ────────────────────────────
 
-    def test_fk_error_when_user_missing_from_users_table(self, auth_client, user):
-        """Directly replicates the bug: session has a valid user_id but that
-        row was removed from users (e.g. by a failed migration), causing
-        every recipe save to return 500 with 'foreign key constraint failed'."""
+    def test_401_when_session_user_missing_from_users_table(self, auth_client, user):
+        """Directly replicates the bug scenario: session has a user_id that no
+        longer exists in the users table (e.g. after a failed migration).
+        The decorator now catches this and returns 401 so the client redirects
+        to login — instead of crashing with a FK constraint 500."""
         conn = models.get_db()
         conn.execute("PRAGMA foreign_keys = OFF")
         conn.execute("DELETE FROM users WHERE id = ?", (user["id"],))
@@ -696,8 +697,7 @@ class TestMigrationRecovery:
         conn.close()
 
         resp = auth_client.post("/api/recipes", json=RECIPE_PAYLOAD)
-        assert resp.status_code == 500
-        assert "foreign key" in _json(resp)["error"].lower()
+        assert resp.status_code == 401
 
     # ── step 2: confirm the recovery logic fixes the state ─────────────────
 

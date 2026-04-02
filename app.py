@@ -48,10 +48,14 @@ if os.getenv("FACEBOOK_CLIENT_ID"):
 
 
 def login_required_api(f):
-    """Return 401 for API calls when the user is not logged in."""
+    """Return 401 for API calls when the user is not logged in or no longer exists in the DB."""
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not session.get("user_id"):
+        uid = session.get("user_id")
+        if not uid:
+            return jsonify({"error": "Authentication required"}), 401
+        if not models.get_user_by_id(uid):
+            session.clear()
             return jsonify({"error": "Authentication required"}), 401
         return f(*args, **kwargs)
     return decorated
