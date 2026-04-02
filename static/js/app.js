@@ -1249,22 +1249,24 @@ $("#cal-view-month").addEventListener("click", () => {
 
 // ── Assign recipe to calendar modal ──
 function openAssignToCalendarModal(recipeId, title, defaultServings) {
-    let viewDate = new Date();
+    // Default to following week
+    const nextMonday = getMonday(new Date());
+    nextMonday.setDate(nextMonday.getDate() + 7);
+    let weekStart = nextMonday;
 
     function renderGrid(modal) {
-        const year = viewDate.getFullYear();
-        const month = viewDate.getMonth();
-        const gridDates = getCalendarGridDates(year, month);
-        const monthDates = gridDates.filter(d => d.getMonth() === month);
-        const uniqueDates = [...new Set(monthDates.map(d => isoDate(d)))];
-        const monthLabel = viewDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+        const weekDates = getWeekGridDates(weekStart);
+        const uniqueDates = weekDates.map(d => isoDate(d));
+        const weekEnd = weekDates[6];
+        const weekLabel = weekDates[0].toLocaleDateString(undefined, { day: "numeric", month: "short" })
+            + " – " + weekEnd.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 
         modal.querySelector(".modal-inner").innerHTML = `
             <h3>Add to Calendar</h3>
             <p class="copy-hint">${escHtml(title)}</p>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
                 <button class="btn btn-small assign-prev">&#8249;</button>
-                <strong>${monthLabel}</strong>
+                <strong>${weekLabel}</strong>
                 <button class="btn btn-small assign-next">&#8250;</button>
             </div>
             <div class="copy-grid">
@@ -1286,11 +1288,13 @@ function openAssignToCalendarModal(recipeId, title, defaultServings) {
             </div>`;
 
         modal.querySelector(".assign-prev").addEventListener("click", () => {
-            viewDate.setMonth(viewDate.getMonth() - 1);
+            weekStart = new Date(weekStart);
+            weekStart.setDate(weekStart.getDate() - 7);
             renderGrid(modal);
         });
         modal.querySelector(".assign-next").addEventListener("click", () => {
-            viewDate.setMonth(viewDate.getMonth() + 1);
+            weekStart = new Date(weekStart);
+            weekStart.setDate(weekStart.getDate() + 7);
             renderGrid(modal);
         });
         modal.querySelector(".cancel-add").addEventListener("click", () => modal.remove());
