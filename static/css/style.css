@@ -1432,8 +1432,10 @@ li.category-hidden {
    ─────────────────────────────────── */
 @media (max-width: 900px) {
     .sidebar { width: 64px; padding: 16px 8px; }
-    .sidebar-header h1, .nav-link { font-size: 0; }
-    .nav-link::first-letter { font-size: 20px; }
+    .sidebar-header h1 { display: none; }
+    .nav-link { font-size: 20px; text-align: center; padding: 12px 8px; }
+    .nav-link span { display: none; }
+    .sidebar-username { display: none; }
     .content { margin-left: 64px; padding: 20px; }
     .meal-grid { grid-template-columns: repeat(2, 1fr); }
 }
@@ -2492,7 +2494,7 @@ li.category-hidden {
     padding: 48px 40px;
     text-align: center;
     max-width: 400px;
-    width: 100%;
+    width: calc(100% - 32px);
 }
 .login-header {
     display: flex;
@@ -2597,4 +2599,169 @@ li.category-hidden {
 }
 .sidebar-logout:hover {
     opacity: 1;
+}
+
+/* ───────────────────────────────────
+   Mobile Optimisations
+   ─────────────────────────────────── */
+
+@media (max-width: 600px) {
+    /* ── Bottom tab bar ── */
+    .sidebar {
+        left: 0;
+        right: 0;
+        overflow: hidden;
+    }
+    .sidebar-user { display: none; }
+    .nav-links li { flex: 1; text-align: center; }
+    .nav-link {
+        font-size: 20px;
+        text-align: center;
+        padding: 8px 0;
+        line-height: 1;
+        margin-bottom: 0;
+    }
+    .nav-link::first-letter { font-size: unset; }
+    .nav-link span { display: none; }
+
+    /* ── View header ── */
+    .view-header {
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 16px;
+    }
+    .view-header h2 { font-size: 20px; }
+    .view-header-actions { width: 100%; }
+    .add-recipe-dropdown { flex: 1; }
+    .add-recipe-dropdown > .btn { width: 100%; justify-content: center; }
+
+    /* ── Recipe filter bar ── */
+    .recipe-filter-bar {
+        flex-direction: column;
+        gap: 10px;
+        align-items: stretch;
+    }
+    .search-tag-picker { max-width: none; }
+    .time-slider-wrap { width: 100%; }
+    #time-slider { flex: 1; width: auto; }
+    .sort-wrap { margin-left: 0; }
+
+    /* ── Modals ── */
+    .modal-content {
+        width: calc(100% - 24px);
+        max-width: 600px;
+        max-height: 85vh;
+        margin: 0 12px;
+    }
+    .add-meal-modal .modal-inner {
+        width: calc(100% - 24px);
+        max-width: 420px;
+    }
+    .modal-recipe-image {
+        height: 180px;
+    }
+
+    /* ── Copy-to grid ── */
+    .copy-grid {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+    }
+
+    /* ── Chat ── */
+    .chat-container {
+        height: calc(100vh - 140px - 60px);
+    }
+    .chat-messages { padding: 14px; }
+    .chat-bubble { max-width: 92%; }
+    .chat-input-area {
+        padding: 10px 12px;
+        gap: 8px;
+    }
+    .chat-input-area .textarea { font-size: 16px; }
+    .chat-plan-grid {
+        grid-template-columns: 1fr;
+    }
+
+    /* ── Shopping ── */
+    .shopping-list-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    .shopping-list-header-right { width: 100%; }
+    .shopping-list-header-right .btn {
+        flex: 1;
+        justify-content: center;
+    }
+    .shopping-date-range { min-width: 0; font-size: 13px; }
+
+    /* ── Forms ── */
+    .form-card { max-width: none; }
+    .import-card { max-width: none; }
+    .scraped-preview { max-width: none; }
+    .scraped-header { flex-direction: column; align-items: flex-start; }
+    .scraped-image { width: 100%; height: 180px; }
+    .url-input-group { flex-direction: column; }
+
+    /* ── Bulk action bar ── */
+    .bulk-action-bar {
+        bottom: 60px;
+        border-radius: 0;
+    }
+    .bulk-action-buttons { flex-wrap: wrap; gap: 6px; }
+
+    /* ── Calendar nav ── */
+    .calendar-nav {
+        flex-wrap: wrap;
+    }
+    .calendar-nav h3 {
+        font-size: 16px;
+        min-width: 0;
+        flex: 1;
+    }
+
+    /* ── Month view cells ── */
+    .cal-cell {
+        min-height: 70px;
+        padding: 2px 3px;
+    }
+    .cal-cell-date { font-size: 10px; }
+    .cal-entry { font-size: 9px; padding: 1px 3px; }
+    .cal-meal-label { font-size: 0; height: 0; margin: 0; }
+    .cal-add-btn { font-size: 9px; padding: 2px 0; min-height: 20px; }
+
+    /* ── Settings ── */
+    .settings-card { max-width: none; }
+    .settings-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+    .settings-row .input-select { width: 100%; }
+
+    /* ── Touch target improvements ── */
+    .btn-small { min-height: 36px; }
+    .input, .textarea { font-size: 16px; }
+    select.input-select { font-size: 16px; }
+
+    /* ── Precook screen ── */
+    .precook-card { padding: 24px 20px; }
+
+    /* ── Chat recipe modal ── */
+    .chat-recipe-modal-body {
+        max-width: none;
+        width: calc(100% - 24px);
+        max-height: 90vh;
+    }
+    .chat-modal-img-wrap { height: 180px; }
+}
+
+/* Extra small screens */
+@media (max-width: 380px) {
+    .content { padding: 10px; }
+    .view-header h2 { font-size: 18px; }
+    .card { padding: 16px; }
+    .copy-grid { grid-template-columns: repeat(3, 1fr); }
+    .cal-cell { min-height: 58px; }
+    .cal-entry { font-size: 8px; }
 }
