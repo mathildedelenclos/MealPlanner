@@ -660,7 +660,7 @@ async function showEditRecipeForm(recipe) {
         saveBtn.disabled = true;
         saveBtn.textContent = t("recipes.saving");
 
-        await fetch(`${API}/api/recipes/${recipe.id}`, {
+        const updateRes = await fetch(`${API}/api/recipes/${recipe.id}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -674,6 +674,13 @@ async function showEditRecipeForm(recipe) {
                 image_url: recipe.image_url,
             }),
         });
+        if (!updateRes.ok) {
+            const err = await updateRes.json().catch(() => ({}));
+            alert(err.error || t("recipes.saveError"));
+            saveBtn.disabled = false;
+            saveBtn.textContent = t("recipes.save");
+            return;
+        }
 
         openRecipeModal(recipe.id);
         loadRecipes();
@@ -856,11 +863,16 @@ $("#btn-save-recipe").addEventListener("click", async () => {
         return;
     }
 
-    await fetch(`${API}/api/recipes`, {
+    const saveRes = await fetch(`${API}/api/recipes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, ingredients, instructions, servings, total_time: totalTime, categories }),
     });
+    if (!saveRes.ok) {
+        const err = await saveRes.json().catch(() => ({}));
+        alert(err.error || t("recipes.saveError"));
+        return;
+    }
 
     hide($("#new-recipe-form"));
     $("#recipe-title").value = "";
@@ -940,11 +952,16 @@ $("#import-url").addEventListener("keydown", (e) => {
 
 $("#btn-save-scraped").addEventListener("click", async () => {
     if (!scrapedData) return;
-    await fetch(`${API}/api/recipes`, {
+    const saveRes = await fetch(`${API}/api/recipes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(scrapedData),
     });
+    if (!saveRes.ok) {
+        const err = await saveRes.json().catch(() => ({}));
+        alert(err.error || t("recipes.saveError"));
+        return;
+    }
     alert(t("recipes.recipeSaved"));
     hide($("#scrape-result"));
     hide($("#import-section"));

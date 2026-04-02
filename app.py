@@ -248,17 +248,20 @@ def api_create_recipe():
     instructions = data.get("instructions", [])
     if not title or not ingredients:
         return jsonify({"error": "Title and ingredients are required"}), 400
-    recipe_id = models.create_recipe(
-        session["user_id"],
-        title=title,
-        ingredients=ingredients,
-        instructions=instructions,
-        source_url=data.get("source_url"),
-        image_url=data.get("image_url"),
-        total_time=data.get("total_time"),
-        servings=data.get("servings"),
-        categories=data.get("categories"),
-    )
+    try:
+        recipe_id = models.create_recipe(
+            session["user_id"],
+            title=title,
+            ingredients=ingredients,
+            instructions=instructions,
+            source_url=data.get("source_url"),
+            image_url=data.get("image_url"),
+            total_time=data.get("total_time"),
+            servings=data.get("servings"),
+            categories=data.get("categories"),
+        )
+    except Exception as e:
+        return jsonify({"error": f"Failed to save recipe: {e}"}), 500
     return jsonify({"id": recipe_id}), 201
 
 
