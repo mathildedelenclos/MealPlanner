@@ -924,17 +924,18 @@ async function loadCalendarWeek() {
     weekDates.forEach((dateObj) => {
         const iso = isoDate(dateObj);
         const isToday = iso === todayISO;
+        const dayEntries = entryMap[iso] || [];
         const dayName = dateObj.toLocaleDateString(undefined, { weekday: "short" });
         const dayNum = dateObj.getDate();
-        html += `<div class="cal-week-wh${isToday ? " cal-week-wh-today" : ""}">${dayName} <span class="cal-week-date-num">${dayNum}</span></div>`;
-    });
+        const monthName = dateObj.toLocaleDateString(undefined, { month: "short" });
 
-    weekDates.forEach((dateObj) => {
-        const iso = isoDate(dateObj);
-        const isToday = iso === todayISO;
-        const dayEntries = entryMap[iso] || [];
-
-        html += `<div class="cal-week-cell${isToday ? " cal-cell-today" : ""}" data-date="${iso}">`;
+        html += `<div class="cal-week-row${isToday ? " cal-week-row-today" : ""}" data-date="${iso}">`;
+        html += `<div class="cal-week-day-label">`;
+        html += `<span class="cal-week-day-name">${dayName}</span>`;
+        html += `<span class="cal-week-date-num">${dayNum}</span>`;
+        html += `<span class="cal-week-month-name">${monthName}</span>`;
+        html += `</div>`;
+        html += `<div class="cal-week-meals">`;
 
         MEALS.forEach((meal) => {
             const mealEntries = dayEntries.filter((e) => e.meal_type === meal);
@@ -967,7 +968,8 @@ async function loadCalendarWeek() {
             html += `</div>`;
         });
 
-        html += `</div>`;
+        html += `</div>`; // .cal-week-meals
+        html += `</div>`; // .cal-week-row
     });
     html += `</div>`;
     grid.innerHTML = html;

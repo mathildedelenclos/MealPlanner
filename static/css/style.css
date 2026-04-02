@@ -2017,46 +2017,143 @@ li.category-hidden {
     color: var(--text);
 }
 
-/* ── Week view ── */
+/* ── Week view (vertical rows) ── */
 .calendar-week-grid {
     width: 100%;
     overflow: hidden;
 }
 .cal-week-grid-inner {
-    display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-    gap: 4px;
-}
-.cal-week-wh {
-    text-align: center;
-    font-weight: 600;
-    font-size: 13px;
-    color: var(--text-muted);
-    padding: 6px 0;
-}
-.cal-week-wh-today {
-    color: var(--primary);
-}
-.cal-week-date-num {
-    font-weight: 700;
-    color: var(--text);
-}
-.cal-week-wh-today .cal-week-date-num {
-    color: var(--primary);
-}
-.cal-week-cell {
-    background: var(--card-bg);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px;
-    min-height: 180px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
 }
-.cal-week-cell.cal-cell-today {
+
+/* Day row */
+.cal-week-row {
+    display: flex;
+    align-items: stretch;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    transition: box-shadow var(--transition);
+}
+.cal-week-row:hover {
+    box-shadow: var(--shadow);
+}
+
+/* Today row highlight */
+.cal-week-row-today {
     border-color: var(--primary);
-    box-shadow: inset 0 0 0 2px var(--primary);
+    box-shadow: 0 0 0 1px var(--primary), var(--shadow);
+}
+.cal-week-row-today .cal-week-day-label {
+    background: var(--primary);
+    color: #fff;
+}
+.cal-week-row-today .cal-week-day-name,
+.cal-week-row-today .cal-week-date-num,
+.cal-week-row-today .cal-week-month-name {
+    color: #fff;
+}
+
+/* Day label (left column) */
+.cal-week-day-label {
+    flex-shrink: 0;
+    width: 72px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 8px;
+    background: var(--bg);
+    border-right: 1px solid var(--border);
+    gap: 1px;
+    transition: background var(--transition), color var(--transition);
+}
+.cal-week-day-name {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+}
+.cal-week-date-num {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--text);
+}
+.cal-week-month-name {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+/* Meals container (right side, horizontal) */
+.cal-week-meals {
+    flex: 1;
+    display: flex;
+    min-height: 80px;
+}
+
+/* Meal slots in week view */
+.calendar-week-grid .cal-meal-slot {
+    flex: 1;
+    padding: 10px 12px;
+    border-radius: 0;
+    min-height: auto;
+    border: none;
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.calendar-week-grid .cal-meal-slot:first-child {
+    border-left: none;
+}
+.calendar-week-grid .cal-meal-label {
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    margin-bottom: 2px;
+}
+
+/* Entry chips in week view */
+.calendar-week-grid .cal-entry {
+    padding: 5px 10px;
+    font-size: 13px;
+    border-radius: 6px;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+.calendar-week-grid .cal-entry-link {
+    font-size: 13px;
+}
+.calendar-week-grid .cal-entry-srv {
+    font-size: 10px;
+    background: rgba(59,130,246,0.08);
+    padding: 1px 6px;
+    border-radius: 3px;
+}
+.calendar-week-grid .cal-entry-actions {
+    padding: 0 6px;
+}
+.calendar-week-grid .cal-entry-copy,
+.calendar-week-grid .cal-entry-remove {
+    font-size: 13px;
+    padding: 0 3px;
+}
+
+/* Add button in week view */
+.calendar-week-grid .cal-add-btn {
+    width: auto;
+    align-self: flex-start;
+    padding: 3px 14px;
+    font-size: 12px;
+    border-radius: 6px;
+    margin-top: auto;
 }
 
 /* ── Month view (existing) ── */
@@ -2260,6 +2357,7 @@ li.category-hidden {
 }
 
 @media (max-width: 900px) {
+    /* Month view */
     .cal-cell {
         min-height: 80px;
         padding: 3px;
@@ -2271,14 +2369,49 @@ li.category-hidden {
     }
     .cal-meal-label { font-size: 8px; }
     .cal-add-btn { font-size: 10px; }
-    .cal-week-cell {
-        min-height: 120px;
-        padding: 5px;
+
+    /* Week view: narrower day label, meals stack vertically */
+    .cal-week-day-label {
+        width: 56px;
+        padding: 8px 4px;
     }
-    .cal-week-wh { font-size: 11px; }
+    .cal-week-date-num { font-size: 18px; }
+    .cal-week-day-name { font-size: 10px; }
+    .cal-week-month-name { font-size: 9px; }
+    .cal-week-meals {
+        flex-direction: column;
+    }
+    .calendar-week-grid .cal-meal-slot {
+        border-left: none;
+        border-top: 1px solid var(--border);
+        padding: 6px 8px;
+    }
+    .calendar-week-grid .cal-meal-slot:first-child {
+        border-top: none;
+    }
+    .calendar-week-grid .cal-entry {
+        font-size: 12px;
+        padding: 4px 8px;
+    }
+
     .cal-view-toggle { display: none; }
     .calendar-nav h3 {
         font-size: 16px;
         min-width: 140px;
     }
+}
+
+@media (max-width: 600px) {
+    .cal-week-row {
+        flex-direction: column;
+    }
+    .cal-week-day-label {
+        width: 100%;
+        flex-direction: row;
+        gap: 6px;
+        padding: 6px 12px;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+    }
+    .cal-week-date-num { font-size: 16px; }
 }
