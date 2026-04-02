@@ -1138,6 +1138,13 @@ function openEntryContextMenu(entry) {
 
     entry.appendChild(menu);
 
+    // Flip menu upward if it overflows the viewport
+    const menuRect = menu.getBoundingClientRect();
+    if (menuRect.bottom > window.innerHeight) {
+        menu.style.top = "auto";
+        menu.style.bottom = "100%";
+    }
+
     // Servings +/- handlers
     if (isRecipe) {
         const valEl = menu.querySelector(".ctx-srv-val");
