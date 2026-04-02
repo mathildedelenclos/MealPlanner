@@ -78,6 +78,10 @@ def _get_gemini():
 # ──────────────────────────────────────
 
 @app.route("/")
+@app.route("/calendar")
+@app.route("/recipes")
+@app.route("/shopping")
+@app.route("/chat")
 def index():
     return render_template("index.html")
 

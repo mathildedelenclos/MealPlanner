@@ -17,24 +17,62 @@ const show = (el) => el.classList.remove("hidden");
 const hide = (el) => el.classList.add("hidden");
 
 // ═══════════════════════════════════
-// Navigation
+// Navigation (URL-based routing)
 // ═══════════════════════════════════
+
+const PATH_TO_VIEW = {
+    "/": "meal-plans",
+    "/calendar": "meal-plans",
+    "/recipes": "recipes",
+    "/shopping": "shopping",
+    "/chat": "chat",
+};
+
+const VIEW_TO_PATH = {
+    "meal-plans": "/calendar",
+    "recipes": "/recipes",
+    "shopping": "/shopping",
+    "chat": "/chat",
+};
+
+function navigateToView(view, pushState = true) {
+    $$(".nav-link").forEach((l) => l.classList.remove("active"));
+    const activeLink = document.querySelector(`.nav-link[data-view="${view}"]`);
+    if (activeLink) activeLink.classList.add("active");
+    $$(".view").forEach((v) => v.classList.remove("active"));
+    $(`#view-${view}`).classList.add("active");
+
+    if (pushState) {
+        const path = VIEW_TO_PATH[view] || "/calendar";
+        history.pushState({ view }, "", path);
+    }
+
+    // Load data for the view
+    if (view === "meal-plans") loadCalendar();
+    if (view === "recipes") loadRecipes();
+    if (view === "shopping") loadShoppingView();
+}
 
 $$(".nav-link").forEach((link) => {
     link.addEventListener("click", (e) => {
         e.preventDefault();
-        const view = link.dataset.view;
-        $$(".nav-link").forEach((l) => l.classList.remove("active"));
-        link.classList.add("active");
-        $$(".view").forEach((v) => v.classList.remove("active"));
-        $(`#view-${view}`).classList.add("active");
-
-        // Load data when switching views
-        if (view === "meal-plans") loadCalendar();
-        if (view === "recipes") loadRecipes();
-        if (view === "shopping") loadShoppingView();
+        navigateToView(link.dataset.view);
     });
 });
+
+// Handle browser back/forward
+window.addEventListener("popstate", (e) => {
+    const view = (e.state && e.state.view) || PATH_TO_VIEW[location.pathname] || "meal-plans";
+    navigateToView(view, false);
+});
+
+// Resolve initial view from URL on page load
+(function initRouting() {
+    const view = PATH_TO_VIEW[location.pathname] || "meal-plans";
+    navigateToView(view, false);
+    // Replace current history entry so back button works correctly
+    history.replaceState({ view }, "", location.pathname === "/" ? "/calendar" : location.pathname);
+})();
 
 // ═══════════════════════════════════
 // Recipes
@@ -2569,5 +2607,4 @@ function formatDates(dates) {
     return `${first} – ${last} (${dates.length} days)`;
 }
 
-// Initial load
-loadCalendar();
+// Initial load is handled by initRouting() in the Navigation section
