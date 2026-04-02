@@ -751,3 +751,77 @@ class TestMigrationRecovery:
 
         resp = auth_client.post("/api/recipes", json=RECIPE_PAYLOAD)
         assert resp.status_code == 201, _json(resp)
+
+    def _put_db_in_fk_points_to_users_old_state(self, user_id):
+        """Simulate the exact production bug: recipes.user_id FK was rewritten
+        to REFERENCES users_old(id) when SQLite auto-updated FK references
+        during an ALTER TABLE users RENAME TO users_old migration.
+        New users only exist in users (not users_old) so their saves fail."""
+        import sqlite3 as _sqlite3
+        conn = _sqlite3.connect(models.DB_PATH)
+        conn.execute("PRAGMA foreign_keys = OFF")
+        # Create users_old with only original users (simulating incomplete drop)
+        conn.execute("""CREATE TABLE IF NOT EXISTS users_old (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            google_id TEXT UNIQUE NOT NULL,
+            email TEXT NOT NULL, name TEXT, picture TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""")
+        # Recreate recipes with FK pointing to users_old (the production bug state)
+        conn.execute("ALTER TABLE recipes RENAME TO recipes_backup")
+        conn.execute("""CREATE TABLE recipes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL, source_url TEXT, image_url TEXT,
+            total_time TEXT, servings TEXT,
+            categories TEXT NOT NULL DEFAULT '[]',
+            ingredients TEXT NOT NULL, instructions TEXT NOT NULL,
+            user_id INTEGER REFERENCES users_old(id),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""")
+        conn.execute("""INSERT INTO recipes
+            SELECT id, title, source_url, image_url, total_time, servings,
+                   categories, ingredients, instructions, user_id, created_at FROM recipes_backup""")
+        conn.execute("DROP TABLE recipes_backup")
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.commit()
+        conn.close()
+
+    def test_new_user_cannot_save_recipe_when_fk_points_to_users_old(self, auth_client, user):
+        """Reproduce the production bug: a new user (exists in users but not
+        users_old) gets a FK constraint error when saving a recipe."""
+        self._put_db_in_fk_points_to_users_old_state(user["id"])
+        # Without the migration fix, this would be 500 (FK constraint failed)
+        # With the fix applied at init_db() time, it would be 201.
+        # Here we confirm the broken state actually causes 500 before init_db():
+        resp = auth_client.post("/api/recipes", json=RECIPE_PAYLOAD)
+        assert resp.status_code == 500, _json(resp)
+
+    def test_init_db_fixes_fk_pointing_to_users_old(self, auth_client, user):
+        """After init_db() runs the FK-fix migration, recipe saves succeed
+        for users that only exist in the users table (not users_old)."""
+        self._put_db_in_fk_points_to_users_old_state(user["id"])
+        models.init_db()
+
+        # Verify FK now points to users, not users_old
+        import sqlite3 as _sqlite3
+        conn = _sqlite3.connect(models.DB_PATH)
+        fk_list = conn.execute("PRAGMA foreign_key_list(recipes)").fetchall()
+        conn.close()
+        assert all(row[2] != "users_old" for row in fk_list), \
+            "recipes.user_id still references users_old after migration"
+
+        resp = auth_client.post("/api/recipes", json=RECIPE_PAYLOAD)
+        assert resp.status_code == 201, _json(resp)
+
+    def test_users_old_dropped_after_fk_fix_migration(self, user):
+        """users_old is cleaned up as part of the FK-fix migration."""
+        self._put_db_in_fk_points_to_users_old_state(user["id"])
+        models.init_db()
+
+        import sqlite3 as _sqlite3
+        conn = _sqlite3.connect(models.DB_PATH)
+        leftover = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='users_old'"
+        ).fetchone()
+        conn.close()
+        assert leftover is None

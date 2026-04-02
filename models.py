@@ -125,6 +125,68 @@ def init_db():
             conn.execute("DROP TABLE users_old")
     except Exception:
         pass
+    # Migration: fix FK references pointing to users_old → users in all tables.
+    # This happened because SQLite auto-updates FK refs when a table is renamed;
+    # renaming users→users_old rewrote recipes.user_id to REFERENCES users_old(id).
+    try:
+        conn.execute("PRAGMA foreign_keys = OFF")
+        for tbl, recreate_sql, insert_sql in (
+            (
+                "recipes",
+                """CREATE TABLE recipes_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL, source_url TEXT, image_url TEXT,
+                    total_time TEXT, servings TEXT,
+                    categories TEXT NOT NULL DEFAULT '[]',
+                    ingredients TEXT NOT NULL, instructions TEXT NOT NULL,
+                    user_id INTEGER REFERENCES users(id),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )""",
+                """INSERT INTO recipes_new
+                   SELECT id, title, source_url, image_url, total_time, servings,
+                          categories, ingredients, instructions, user_id, created_at FROM recipes""",
+            ),
+            (
+                "calendar_entries",
+                """CREATE TABLE calendar_entries_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    entry_date TEXT NOT NULL, meal_type TEXT NOT NULL,
+                    recipe_id INTEGER, note TEXT, servings INTEGER NOT NULL DEFAULT 2,
+                    user_id INTEGER REFERENCES users(id),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
+                )""",
+                """INSERT INTO calendar_entries_new
+                   SELECT id, entry_date, meal_type, recipe_id, note, servings, user_id, created_at
+                   FROM calendar_entries""",
+            ),
+            (
+                "custom_shopping_items",
+                """CREATE TABLE custom_shopping_items_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    text TEXT NOT NULL, category TEXT NOT NULL DEFAULT 'Other',
+                    checked INTEGER NOT NULL DEFAULT 0,
+                    user_id INTEGER REFERENCES users(id),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )""",
+                """INSERT INTO custom_shopping_items_new
+                   SELECT id, text, category, checked, user_id, created_at FROM custom_shopping_items""",
+            ),
+        ):
+            fk_list = conn.execute(f"PRAGMA foreign_key_list({tbl})").fetchall()
+            if any(row[2] == "users_old" for row in fk_list):
+                conn.execute(recreate_sql)
+                conn.execute(insert_sql)
+                conn.execute(f"DROP TABLE {tbl}")
+                conn.execute(f"ALTER TABLE {tbl}_new RENAME TO {tbl}")
+        # Drop users_old now that FKs are fixed and data is safe in users
+        if conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='users_old'"
+        ).fetchone():
+            conn.execute("DROP TABLE users_old")
+        conn.execute("PRAGMA foreign_keys = ON")
+    except Exception:
+        conn.execute("PRAGMA foreign_keys = ON")
     # Migrate old settings table (key PK) to new schema (user_id+key PK)
     try:
         cur = conn.execute("PRAGMA table_info(settings)")
