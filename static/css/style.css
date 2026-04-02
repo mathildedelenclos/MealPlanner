@@ -2035,7 +2035,7 @@ li.category-hidden {
     background: var(--card-bg);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    overflow: hidden;
+    overflow: visible;
     transition: box-shadow var(--transition);
 }
 .cal-week-row:hover {
@@ -2194,7 +2194,7 @@ li.category-hidden {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    overflow: hidden;       /* clip anything that would expand the cell */
+    overflow: visible;
 }
 .cal-cell-dim { opacity: 0.35; }
 .cal-cell-today {
@@ -2248,7 +2248,7 @@ li.category-hidden {
     line-height: 1.3;
     margin-bottom: 2px;
     cursor: grab;
-    overflow: hidden;       /* absolutely critical – keeps content clipped */
+    overflow: visible;
     transition: box-shadow var(--transition);
 }
 .cal-entry:hover {
@@ -2284,41 +2284,73 @@ li.category-hidden {
     flex-shrink: 0;
 }
 
-/* Action buttons overlay on hover – take zero width in normal flow */
-.cal-entry-actions {
+/* ── Entry context menu ── */
+.cal-ctx-menu {
     position: absolute;
     right: 0;
-    top: 0;
-    bottom: 0;
+    top: 100%;
+    z-index: 30;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-lg);
+    padding: 6px 0;
+    min-width: 170px;
+    white-space: nowrap;
+}
+.ctx-servings {
     display: flex;
     align-items: center;
-    gap: 1px;
-    padding: 0 3px;
-    background: linear-gradient(90deg, transparent 0%, #eef2ff 30%);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity var(--transition);
+    justify-content: space-between;
+    padding: 6px 12px;
+    gap: 8px;
 }
-.cal-entry-note .cal-entry-actions {
-    background: linear-gradient(90deg, transparent 0%, #fff8e1 30%);
+.ctx-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
 }
-.cal-entry:hover .cal-entry-actions {
-    opacity: 1;
-    pointer-events: auto;
+.ctx-srv-picker {
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
-.cal-entry-copy,
-.cal-entry-remove {
+.ctx-srv-picker .btn {
+    padding: 2px 8px;
+    font-size: 13px;
+    min-width: 0;
+    line-height: 1.2;
+}
+.ctx-srv-val {
+    font-weight: 700;
+    font-size: 14px;
+    min-width: 20px;
+    text-align: center;
+}
+.ctx-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0;
+}
+.ctx-action {
+    display: block;
+    width: 100%;
+    text-align: left;
     background: none;
     border: none;
+    padding: 7px 12px;
+    font-size: 13px;
+    font-family: inherit;
+    color: var(--text);
     cursor: pointer;
-    font-size: 11px;
-    padding: 0 2px;
-    color: var(--text-muted);
-    flex-shrink: 0;
-    line-height: 1;
+    transition: background var(--transition);
 }
-.cal-entry-remove:hover { color: var(--danger); }
-.cal-entry-copy:hover   { color: var(--primary); }
+.ctx-action:hover {
+    background: var(--bg);
+}
+.ctx-remove:hover {
+    color: var(--danger);
+}
 
 /* ── Add button ── */
 .cal-add-btn {

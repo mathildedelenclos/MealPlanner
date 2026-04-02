@@ -192,6 +192,16 @@ def move_calendar_entry(entry_id, entry_date, meal_type):
     conn.close()
 
 
+def update_calendar_entry_servings(entry_id, servings):
+    conn = get_db()
+    conn.execute(
+        "UPDATE calendar_entries SET servings = ? WHERE id = ?",
+        (servings, entry_id)
+    )
+    conn.commit()
+    conn.close()
+
+
 def copy_calendar_entry(entry_id, entry_date, meal_type):
     conn = get_db()
     row = conn.execute(

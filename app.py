@@ -475,6 +475,16 @@ def api_move_calendar_entry(entry_id):
     return jsonify({"ok": True})
 
 
+@app.route("/api/calendar/entries/<int:entry_id>/servings", methods=["PATCH"])
+def api_update_entry_servings(entry_id):
+    data = request.get_json(force=True)
+    servings = data.get("servings")
+    if not servings or int(servings) < 1:
+        return jsonify({"error": "servings must be >= 1"}), 400
+    models.update_calendar_entry_servings(entry_id, int(servings))
+    return jsonify({"ok": True})
+
+
 @app.route("/api/calendar/entries/<int:entry_id>/copy", methods=["POST"])
 def api_copy_calendar_entry(entry_id):
     data = request.get_json(force=True)
@@ -486,6 +496,15 @@ def api_copy_calendar_entry(entry_id):
     if new_id is None:
         return jsonify({"error": "Entry not found"}), 404
     return jsonify({"id": new_id}), 201
+
+
+@app.route("/api/categorize-ingredient", methods=["POST"])
+def api_categorize_ingredient():
+    data = request.get_json(force=True)
+    text = data.get("text", "").strip()
+    if not text:
+        return jsonify({"category": "Other"})
+    return jsonify({"category": models.categorize_ingredient(text)})
 
 
 @app.route("/api/shopping-list", methods=["GET"])

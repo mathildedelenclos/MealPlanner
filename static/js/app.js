@@ -946,21 +946,13 @@ async function loadCalendarWeek() {
                     html += `<div class="cal-entry cal-entry-note" draggable="true"
                                   data-entry-id="${e.id}" data-entry-type="note">
                         <span class="cal-entry-text">📝 ${escHtml(e.note)}</span>
-                        <span class="cal-entry-actions">
-                            <button class="cal-entry-copy" data-entry-id="${e.id}" title="Copy to…">📋</button>
-                            <button class="cal-entry-remove" data-entry-id="${e.id}">&times;</button>
-                        </span>
                     </div>`;
                 } else {
                     html += `<div class="cal-entry" draggable="true"
                                   data-entry-id="${e.id}" data-entry-type="recipe"
-                                  data-recipe-id="${e.recipe_id}">
+                                  data-recipe-id="${e.recipe_id}" data-servings="${e.servings}">
                         <a href="#" class="cal-entry-link" data-recipe-id="${e.recipe_id}" data-entry-id="${e.id}" data-servings="${e.servings}">${escHtml(e.recipe_title)}</a>
                         <span class="cal-entry-srv">${e.servings}srv</span>
-                        <span class="cal-entry-actions">
-                            <button class="cal-entry-copy" data-entry-id="${e.id}" title="Copy to…">📋</button>
-                            <button class="cal-entry-remove" data-entry-id="${e.id}">&times;</button>
-                        </span>
                     </div>`;
                 }
             });
@@ -1050,21 +1042,13 @@ async function loadCalendarMonth() {
                     html += `<div class="cal-entry cal-entry-note" draggable="true"
                                   data-entry-id="${e.id}" data-entry-type="note">
                         <span class="cal-entry-text">📝 ${escHtml(e.note)}</span>
-                        <span class="cal-entry-actions">
-                            <button class="cal-entry-copy" data-entry-id="${e.id}" title="Copy to…">📋</button>
-                            <button class="cal-entry-remove" data-entry-id="${e.id}">&times;</button>
-                        </span>
                     </div>`;
                 } else {
                     html += `<div class="cal-entry" draggable="true"
                                   data-entry-id="${e.id}" data-entry-type="recipe"
-                                  data-recipe-id="${e.recipe_id}">
+                                  data-recipe-id="${e.recipe_id}" data-servings="${e.servings}">
                         <a href="#" class="cal-entry-link" data-recipe-id="${e.recipe_id}" data-entry-id="${e.id}" data-servings="${e.servings}">${escHtml(e.recipe_title)}</a>
                         <span class="cal-entry-srv">${e.servings}srv</span>
-                        <span class="cal-entry-actions">
-                            <button class="cal-entry-copy" data-entry-id="${e.id}" title="Copy to…">📋</button>
-                            <button class="cal-entry-remove" data-entry-id="${e.id}">&times;</button>
-                        </span>
                     </div>`;
                 }
             });
@@ -1080,26 +1064,109 @@ async function loadCalendarMonth() {
     bindCalendarEvents(grid);
 }
 
+// ── Entry context menu (hover) ──
+function openEntryContextMenu(entry) {
+    // Don't open a duplicate
+    if (entry.querySelector(".cal-ctx-menu")) return;
+    // Close any other open menu
+    document.querySelectorAll(".cal-ctx-menu").forEach(m => m.remove());
+
+    const entryId = entry.dataset.entryId;
+    const isRecipe = entry.dataset.entryType === "recipe";
+    let currentServings = parseInt(entry.dataset.servings) || 2;
+    const origServings = currentServings;
+
+    const menu = document.createElement("div");
+    menu.className = "cal-ctx-menu";
+
+    let servingsHtml = "";
+    if (isRecipe) {
+        servingsHtml = `
+            <div class="ctx-servings">
+                <span class="ctx-label">Servings</span>
+                <div class="ctx-srv-picker">
+                    <button class="btn btn-secondary ctx-srv-dec">&minus;</button>
+                    <span class="ctx-srv-val">${currentServings}</span>
+                    <button class="btn btn-secondary ctx-srv-inc">+</button>
+                </div>
+            </div>
+            <div class="ctx-divider"></div>`;
+    }
+
+    menu.innerHTML = `
+        ${servingsHtml}
+        <button class="ctx-action ctx-copy">📋 Copy to…</button>
+        <button class="ctx-action ctx-remove">🗑 Remove</button>`;
+
+    entry.appendChild(menu);
+
+    // Servings +/- handlers
+    if (isRecipe) {
+        const valEl = menu.querySelector(".ctx-srv-val");
+        menu.querySelector(".ctx-srv-dec").addEventListener("click", (e) => {
+            e.stopPropagation(); e.preventDefault();
+            if (currentServings > 1) { currentServings--; valEl.textContent = currentServings; }
+        });
+        menu.querySelector(".ctx-srv-inc").addEventListener("click", (e) => {
+            e.stopPropagation(); e.preventDefault();
+            currentServings++; valEl.textContent = currentServings;
+        });
+    }
+
+    // Copy handler
+    menu.querySelector(".ctx-copy").addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeMenu();
+        openCopyModal(parseInt(entryId));
+    });
+
+    // Remove handler
+    menu.querySelector(".ctx-remove").addEventListener("click", async (e) => {
+        e.stopPropagation();
+        closeMenu();
+        await fetch(`${API}/api/calendar/entries/${entryId}`, { method: "DELETE" });
+        loadCalendar();
+    });
+
+    // Close menu helper — saves servings if changed
+    let closed = false;
+    function closeMenu() {
+        if (closed) return;
+        closed = true;
+        menu.remove();
+        if (isRecipe && currentServings !== origServings) {
+            fetch(`${API}/api/calendar/entries/${entryId}/servings`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ servings: currentServings }),
+            }).then(() => loadCalendar());
+        }
+    }
+
+    // Close on mouseleave from entry (with delay so moving to menu doesn't close it)
+    let leaveTimer = null;
+    function startLeaveTimer() {
+        leaveTimer = setTimeout(() => closeMenu(), 200);
+    }
+    function cancelLeaveTimer() {
+        if (leaveTimer) { clearTimeout(leaveTimer); leaveTimer = null; }
+    }
+    entry.addEventListener("mouseleave", startLeaveTimer);
+    entry.addEventListener("mouseenter", cancelLeaveTimer);
+    menu.addEventListener("mouseenter", cancelLeaveTimer);
+    menu.addEventListener("mouseleave", startLeaveTimer);
+}
+
 function bindCalendarEvents(grid) {
     // Bind add buttons
     grid.querySelectorAll(".cal-add-btn").forEach((btn) => {
         btn.addEventListener("click", () => openAddMealModal(btn.dataset.day, btn.dataset.meal));
     });
 
-    // Bind remove buttons
-    grid.querySelectorAll(".cal-entry-remove").forEach((btn) => {
-        btn.addEventListener("click", async (ev) => {
-            ev.stopPropagation();
-            await fetch(`${API}/api/calendar/entries/${btn.dataset.entryId}`, { method: "DELETE" });
-            loadCalendar();
-        });
-    });
-
-    // Bind copy buttons
-    grid.querySelectorAll(".cal-entry-copy").forEach((btn) => {
-        btn.addEventListener("click", (ev) => {
-            ev.stopPropagation();
-            openCopyModal(parseInt(btn.dataset.entryId));
+    // Bind entry hover → context menu
+    grid.querySelectorAll(".cal-entry").forEach((entry) => {
+        entry.addEventListener("mouseenter", () => {
+            openEntryContextMenu(entry);
         });
     });
 
@@ -1654,32 +1721,45 @@ $("#shopping-items").addEventListener("click", (e) => {
 });
 
 // Add custom item to shopping list
-function addShoppingItem(text) {
+async function addShoppingItem(text) {
     if (!text.trim()) return;
+
+    // Get category from backend
+    let category = "Other";
+    try {
+        const res = await fetch(`${API}/api/categorize-ingredient`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: text.trim() }),
+        });
+        const data = await res.json();
+        category = data.category || "Other";
+    } catch (e) { /* fall back to Other */ }
+
     const list = $("#shopping-items");
     const ocadoUrl = ocadoSearchUrl(text.trim());
     const li = document.createElement("li");
-    li.dataset.category = "Other";
+    li.dataset.category = category;
     li.innerHTML = `<label class="shopping-item"><input type="checkbox"><span class="shopping-item-content"><span class="shopping-item-text">${escHtml(text.trim())}</span></span></label><a class="ocado-link" href="${ocadoUrl}" target="_blank" rel="noopener noreferrer" title="Search on Ocado"><img src="https://www.ocado.com/favicon.ico" alt="Ocado" class="ocado-icon"></a>`;
 
-    let otherHeader = list.querySelector('.shopping-category-header[data-category="Other"]');
-    if (!otherHeader) {
-        otherHeader = document.createElement("li");
-        otherHeader.className = "shopping-category-header";
-        otherHeader.dataset.category = "Other";
-        otherHeader.innerHTML = `<span class="shopping-category-left"><span class="shopping-category-chevron">&#9662;</span><span class="shopping-category-name">Other</span></span><span class="shopping-category-count">0</span>`;
-        list.appendChild(otherHeader);
+    let header = list.querySelector(`.shopping-category-header[data-category="${CSS.escape(category)}"]`);
+    if (!header) {
+        header = document.createElement("li");
+        header.className = "shopping-category-header";
+        header.dataset.category = category;
+        header.innerHTML = `<span class="shopping-category-left"><span class="shopping-category-chevron">&#9662;</span><span class="shopping-category-name">${escHtml(category)}</span></span><span class="shopping-category-count">0</span>`;
+        list.appendChild(header);
     }
 
-    const otherItems = [...list.querySelectorAll('li[data-category="Other"]:not(.shopping-category-header)')];
-    if (otherItems.length > 0) {
-        otherItems[otherItems.length - 1].after(li);
+    const catItems = [...list.querySelectorAll(`li[data-category="${CSS.escape(category)}"]:not(.shopping-category-header)`)];
+    if (catItems.length > 0) {
+        catItems[catItems.length - 1].after(li);
     } else {
-        otherHeader.after(li);
+        header.after(li);
     }
 
-    const count = list.querySelectorAll('li[data-category="Other"]:not(.shopping-category-header)').length;
-    otherHeader.querySelector(".shopping-category-count").textContent = count;
+    const count = list.querySelectorAll(`li[data-category="${CSS.escape(category)}"]:not(.shopping-category-header)`).length;
+    header.querySelector(".shopping-category-count").textContent = count;
 }
 
 $("#btn-add-shopping-item").addEventListener("click", () => {
