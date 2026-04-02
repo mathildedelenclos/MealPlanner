@@ -643,3 +643,111 @@ class TestFixInstructions:
         auth_client.post("/api/recipes", json=RECIPE_PAYLOAD)
         resp = auth_client.post("/api/fix-instructions")
         assert _json(resp)["fixed"] == 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Migration recovery — FK constraint regression tests
+#
+# Reproduces the bug: the google_id NOT NULL migration renames users →
+# users_old, creates a fresh users table, then copies rows.  If the copy
+# fails silently the users table is left empty while users_old still holds
+# the real data.  Any subsequent recipe save hits a FK constraint error
+# because the session user_id no longer exists in users.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestMigrationRecovery:
+
+    def _put_db_in_failed_migration_state(self, user_id, google_id, email, name):
+        """Simulate a half-finished migration:
+        - users table exists but is empty
+        - users_old holds the real user row
+        """
+        conn = models.get_db()
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute("DELETE FROM users")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users_old (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                google_id     TEXT UNIQUE NOT NULL,
+                email         TEXT NOT NULL,
+                name          TEXT,
+                picture       TEXT,
+                created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute(
+            "INSERT OR IGNORE INTO users_old (id, google_id, email, name) VALUES (?,?,?,?)",
+            (user_id, google_id, email, name),
+        )
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.commit()
+        conn.close()
+
+    # ── step 1: confirm the bug is reproducible ────────────────────────────
+
+    def test_fk_error_when_user_missing_from_users_table(self, auth_client, user):
+        """Directly replicates the bug: session has a valid user_id but that
+        row was removed from users (e.g. by a failed migration), causing
+        every recipe save to return 500 with 'foreign key constraint failed'."""
+        conn = models.get_db()
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute("DELETE FROM users WHERE id = ?", (user["id"],))
+        conn.commit()
+        conn.close()
+
+        resp = auth_client.post("/api/recipes", json=RECIPE_PAYLOAD)
+        assert resp.status_code == 500
+        assert "foreign key" in _json(resp)["error"].lower()
+
+    # ── step 2: confirm the recovery logic fixes the state ─────────────────
+
+    def test_init_db_restores_users_from_users_old(self, user):
+        """After putting the DB into the failed-migration state, calling
+        init_db() should copy rows back from users_old into users."""
+        self._put_db_in_failed_migration_state(
+            user["id"], "google-recovery-123", "recovery@example.com", "Recovery User"
+        )
+
+        # Confirm the user is gone
+        conn = models.get_db()
+        assert conn.execute(
+            "SELECT id FROM users WHERE id = ?", (user["id"],)
+        ).fetchone() is None
+        conn.close()
+
+        models.init_db()
+
+        conn = models.get_db()
+        restored = conn.execute(
+            "SELECT * FROM users WHERE id = ?", (user["id"],)
+        ).fetchone()
+        conn.close()
+        assert restored is not None
+        assert restored["email"] == "recovery@example.com"
+
+    def test_users_old_is_dropped_after_recovery(self, user):
+        """users_old must not be left in the database after recovery."""
+        self._put_db_in_failed_migration_state(
+            user["id"], "google-recovery-123", "recovery@example.com", "Recovery User"
+        )
+        models.init_db()
+
+        conn = models.get_db()
+        leftover = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='users_old'"
+        ).fetchone()
+        conn.close()
+        assert leftover is None
+
+    # ── step 3: full regression — recipe save works after recovery ─────────
+
+    def test_recipe_save_succeeds_after_migration_recovery(self, auth_client, user):
+        """Full end-to-end regression: DB in failed-migration state →
+        init_db() recovers → recipe save returns 201."""
+        self._put_db_in_failed_migration_state(
+            user["id"], "google-recovery-123", "recovery@example.com", "Recovery User"
+        )
+        models.init_db()
+
+        resp = auth_client.post("/api/recipes", json=RECIPE_PAYLOAD)
+        assert resp.status_code == 201, _json(resp)
