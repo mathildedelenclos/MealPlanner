@@ -20,7 +20,8 @@ def init_db():
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            google_id TEXT UNIQUE NOT NULL,
+            google_id TEXT UNIQUE,
+            facebook_id TEXT UNIQUE,
             email TEXT NOT NULL,
             name TEXT,
             picture TEXT,
@@ -75,6 +76,35 @@ def init_db():
             conn.execute(f"ALTER TABLE {table} ADD COLUMN user_id INTEGER REFERENCES users(id)")
         except Exception:
             pass  # column already exists
+    # Migration: add facebook_id column to users table
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN facebook_id TEXT UNIQUE")
+    except Exception:
+        pass  # column already exists
+    # Migration: relax google_id NOT NULL constraint
+    try:
+        cur = conn.execute("PRAGMA table_info(users)")
+        cols = {row[1]: row[3] for row in cur.fetchall()}  # name -> notnull
+        if cols.get("google_id") == 1:  # NOT NULL is set
+            conn.execute("ALTER TABLE users RENAME TO users_old")
+            conn.execute("""
+                CREATE TABLE users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    google_id TEXT UNIQUE,
+                    facebook_id TEXT UNIQUE,
+                    email TEXT NOT NULL,
+                    name TEXT,
+                    picture TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.execute("""
+                INSERT INTO users (id, google_id, email, name, picture, created_at)
+                SELECT id, google_id, email, name, picture, created_at FROM users_old
+            """)
+            conn.execute("DROP TABLE users_old")
+    except Exception:
+        pass
     # Migrate old settings table (key PK) to new schema (user_id+key PK)
     try:
         cur = conn.execute("PRAGMA table_info(settings)")
@@ -117,6 +147,37 @@ def get_or_create_user(google_id, email, name=None, picture=None):
         )
         conn.commit()
         user_id = cur.lastrowid
+    user = dict(conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone())
+    conn.close()
+    return user
+
+
+def get_or_create_user_facebook(facebook_id, email, name=None, picture=None):
+    """Find an existing user by facebook_id or create a new one. Returns user dict."""
+    conn = get_db()
+    row = conn.execute("SELECT * FROM users WHERE facebook_id = ?", (facebook_id,)).fetchone()
+    if row:
+        conn.execute(
+            "UPDATE users SET email = ?, name = ?, picture = ? WHERE id = ?",
+            (email, name, picture, row["id"]),
+        )
+        conn.commit()
+        user_id = row["id"]
+    else:
+        # Link to existing account with same email
+        existing = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone() if email else None
+        if existing:
+            conn.execute("UPDATE users SET facebook_id = ?, name = COALESCE(name, ?), picture = COALESCE(picture, ?) WHERE id = ?",
+                         (facebook_id, name, picture, existing["id"]))
+            conn.commit()
+            user_id = existing["id"]
+        else:
+            cur = conn.execute(
+                "INSERT INTO users (facebook_id, email, name, picture) VALUES (?, ?, ?, ?)",
+                (facebook_id, email or "", name, picture),
+            )
+            conn.commit()
+            user_id = cur.lastrowid
     user = dict(conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone())
     conn.close()
     return user

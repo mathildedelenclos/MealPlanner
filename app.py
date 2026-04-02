@@ -23,7 +23,7 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key")
 
 # ──────────────────────────────────────
-# Google OAuth
+# OAuth Providers
 # ──────────────────────────────────────
 
 oauth = OAuth(app)
@@ -34,6 +34,17 @@ oauth.register(
     server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
     client_kwargs={"scope": "openid email profile"},
 )
+
+if os.getenv("FACEBOOK_CLIENT_ID"):
+    oauth.register(
+        name="facebook",
+        client_id=os.getenv("FACEBOOK_CLIENT_ID"),
+        client_secret=os.getenv("FACEBOOK_CLIENT_SECRET"),
+        authorize_url="https://www.facebook.com/v19.0/dialog/oauth",
+        access_token_url="https://graph.facebook.com/v19.0/oauth/access_token",
+        client_kwargs={"scope": "email public_profile"},
+        userinfo_endpoint="https://graph.facebook.com/me?fields=id,name,email,picture.width(200)",
+    )
 
 
 def login_required_api(f):
@@ -148,6 +159,37 @@ def auth_callback():
         picture=userinfo.get("picture"),
     )
     # Adopt orphan data (pre-auth rows) on first-ever login
+    models.adopt_orphan_data(user["id"])
+    session["user_id"] = user["id"]
+    session["user_name"] = user.get("name", "")
+    session["user_picture"] = user.get("picture", "")
+    return redirect("/calendar")
+
+
+@app.route("/auth/facebook")
+def auth_facebook():
+    base_url = os.getenv("BASE_URL")
+    if base_url:
+        redirect_uri = base_url.rstrip("/") + "/auth/facebook/callback"
+    else:
+        redirect_uri = url_for("auth_facebook_callback", _external=True)
+    return oauth.facebook.authorize_redirect(redirect_uri)
+
+
+@app.route("/auth/facebook/callback")
+def auth_facebook_callback():
+    token = oauth.facebook.authorize_access_token()
+    resp = oauth.facebook.get("https://graph.facebook.com/me?fields=id,name,email,picture.width(200)")
+    userinfo = resp.json()
+    picture = None
+    if userinfo.get("picture", {}).get("data", {}).get("url"):
+        picture = userinfo["picture"]["data"]["url"]
+    user = models.get_or_create_user_facebook(
+        facebook_id=userinfo["id"],
+        email=userinfo.get("email", ""),
+        name=userinfo.get("name"),
+        picture=picture,
+    )
     models.adopt_orphan_data(user["id"])
     session["user_id"] = user["id"]
     session["user_name"] = user.get("name", "")

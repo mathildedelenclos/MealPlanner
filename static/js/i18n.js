@@ -168,6 +168,7 @@ const TRANSLATIONS = {
 
     // Auth
     "auth.signInGoogle": "Sign in with Google",
+    "auth.signInFacebook": "Sign in with Facebook",
     "auth.signInPrompt": "Sign in to access your meal planner",
     "auth.logout": "Log out",
 
@@ -368,6 +369,7 @@ const TRANSLATIONS = {
 
     // Auth
     "auth.signInGoogle": "Se connecter avec Google",
+    "auth.signInFacebook": "Se connecter avec Facebook",
     "auth.signInPrompt": "Connectez-vous pour acc\u00e9der \u00e0 votre planificateur de repas",
     "auth.logout": "Se d\u00e9connecter",
 
