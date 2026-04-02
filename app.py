@@ -6,10 +6,12 @@ import re
 import zipfile
 import threading
 import requests
-from flask import Flask, render_template, request, jsonify
+from functools import wraps
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from dotenv import load_dotenv
 from recipe_scrapers import scrape_html
 from google import genai
+from authlib.integrations.flask_client import OAuth
 
 import models
 
@@ -17,6 +19,29 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key")
+
+# ──────────────────────────────────────
+# Google OAuth
+# ──────────────────────────────────────
+
+oauth = OAuth(app)
+oauth.register(
+    name="google",
+    client_id=os.getenv("GOOGLE_CLIENT_ID"),
+    client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+    client_kwargs={"scope": "openid email profile"},
+)
+
+
+def login_required_api(f):
+    """Return 401 for API calls when the user is not logged in."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("user_id"):
+            return jsonify({"error": "Authentication required"}), 401
+        return f(*args, **kwargs)
+    return decorated
 
 
 def _split_instructions(text):
@@ -84,7 +109,67 @@ def _get_gemini():
 @app.route("/chat")
 @app.route("/settings")
 def index():
+    if not session.get("user_id"):
+        return redirect("/login")
     return render_template("index.html")
+
+
+@app.route("/login")
+def login_page():
+    if session.get("user_id"):
+        return redirect("/calendar")
+    return render_template("login.html")
+
+
+# ──────────────────────────────────────
+# Auth routes
+# ──────────────────────────────────────
+
+@app.route("/auth/google")
+def auth_google():
+    redirect_uri = url_for("auth_callback", _external=True)
+    return oauth.google.authorize_redirect(redirect_uri)
+
+
+@app.route("/auth/callback")
+def auth_callback():
+    token = oauth.google.authorize_access_token()
+    userinfo = token.get("userinfo") or oauth.google.userinfo()
+    user = models.get_or_create_user(
+        google_id=userinfo["sub"],
+        email=userinfo.get("email", ""),
+        name=userinfo.get("name"),
+        picture=userinfo.get("picture"),
+    )
+    # Adopt orphan data (pre-auth rows) on first-ever login
+    models.adopt_orphan_data(user["id"])
+    session["user_id"] = user["id"]
+    session["user_name"] = user.get("name", "")
+    session["user_picture"] = user.get("picture", "")
+    return redirect("/calendar")
+
+
+@app.route("/auth/logout", methods=["POST"])
+def auth_logout():
+    session.clear()
+    return redirect("/login")
+
+
+@app.route("/api/me")
+def api_me():
+    uid = session.get("user_id")
+    if not uid:
+        return jsonify({"error": "Not authenticated"}), 401
+    user = models.get_user_by_id(uid)
+    if not user:
+        session.clear()
+        return jsonify({"error": "User not found"}), 401
+    return jsonify({
+        "id": user["id"],
+        "email": user["email"],
+        "name": user["name"],
+        "picture": user["picture"],
+    })
 
 
 # ──────────────────────────────────────
@@ -92,19 +177,22 @@ def index():
 # ──────────────────────────────────────
 
 @app.route("/api/recipes", methods=["GET"])
+@login_required_api
 def api_get_recipes():
-    return jsonify(models.get_all_recipes())
+    return jsonify(models.get_all_recipes(session["user_id"]))
 
 
 @app.route("/api/recipes/<int:recipe_id>", methods=["GET"])
+@login_required_api
 def api_get_recipe(recipe_id):
-    recipe = models.get_recipe(recipe_id)
+    recipe = models.get_recipe(session["user_id"], recipe_id)
     if recipe is None:
         return jsonify({"error": "Recipe not found"}), 404
     return jsonify(recipe)
 
 
 @app.route("/api/recipes", methods=["POST"])
+@login_required_api
 def api_create_recipe():
     data = request.get_json(force=True)
     title = data.get("title", "").strip()
@@ -113,6 +201,7 @@ def api_create_recipe():
     if not title or not ingredients:
         return jsonify({"error": "Title and ingredients are required"}), 400
     recipe_id = models.create_recipe(
+        session["user_id"],
         title=title,
         ingredients=ingredients,
         instructions=instructions,
@@ -126,22 +215,25 @@ def api_create_recipe():
 
 
 @app.route("/api/recipes/<int:recipe_id>", methods=["DELETE"])
+@login_required_api
 def api_delete_recipe(recipe_id):
-    models.delete_recipe(recipe_id)
+    models.delete_recipe(session["user_id"], recipe_id)
     return jsonify({"ok": True})
 
 
 @app.route("/api/recipes/bulk-delete", methods=["POST"])
+@login_required_api
 def api_bulk_delete_recipes():
     data = request.get_json(force=True)
     ids = data.get("ids", [])
     if not ids:
         return jsonify({"error": "No recipe IDs provided"}), 400
-    models.delete_recipes_bulk(ids)
+    models.delete_recipes_bulk(session["user_id"], ids)
     return jsonify({"ok": True, "deleted": len(ids)})
 
 
 @app.route("/api/recipes/<int:recipe_id>", methods=["PUT"])
+@login_required_api
 def api_update_recipe(recipe_id):
     data = request.get_json(force=True)
     title = data.get("title", "").strip()
@@ -150,6 +242,7 @@ def api_update_recipe(recipe_id):
     if not title or not ingredients:
         return jsonify({"error": "Title and ingredients are required"}), 400
     models.update_recipe(
+        session["user_id"],
         recipe_id,
         title=title,
         ingredients=ingredients,
@@ -168,6 +261,7 @@ def api_update_recipe(recipe_id):
 # ──────────────────────────────────────
 
 @app.route("/api/scrape", methods=["POST"])
+@login_required_api
 def api_scrape_url():
     data = request.get_json(force=True)
     url = data.get("url", "").strip()
@@ -237,6 +331,7 @@ def api_scrape_url():
 # ──────────────────────────────────────
 
 @app.route("/api/import-paprika", methods=["POST"])
+@login_required_api
 def api_import_paprika():
     """Import recipes from a .paprikarecipes file."""
     if "file" not in request.files:
@@ -245,6 +340,7 @@ def api_import_paprika():
     if not f.filename:
         return jsonify({"error": "No file selected"}), 400
 
+    user_id = session["user_id"]
     imported = []
     try:
         raw = f.read()
@@ -295,6 +391,7 @@ def api_import_paprika():
             categories = [c.strip() for c in cat_raw.split("\n") if c.strip()] if isinstance(cat_raw, str) else (cat_raw or [])
 
             recipe_id = models.create_recipe(
+                user_id,
                 title=title,
                 ingredients=ingredients if ingredients else [""],
                 instructions=instructions if instructions else [""],
@@ -313,6 +410,7 @@ def api_import_paprika():
 
 
 @app.route("/api/import-excel", methods=["POST"])
+@login_required_api
 def api_import_excel():
     """Import recipes from an Excel (.xlsx) file."""
     import openpyxl
@@ -323,6 +421,7 @@ def api_import_excel():
     if not f.filename:
         return jsonify({"error": "No file selected"}), 400
 
+    user_id = session["user_id"]
     imported = []
     try:
         wb = openpyxl.load_workbook(io.BytesIO(f.read()), read_only=True)
@@ -385,6 +484,7 @@ def api_import_excel():
             source_url = str(col(row, "source url", "source_url", "link", "url")).strip() or None
 
             recipe_id = models.create_recipe(
+                user_id,
                 title=title,
                 ingredients=ingredients if ingredients else [""],
                 instructions=instructions if instructions else [""],
@@ -421,9 +521,10 @@ def api_import_excel():
 
 
 @app.route("/api/categories", methods=["GET"])
+@login_required_api
 def api_get_categories():
     """Return all unique categories used across recipes."""
-    recipes = models.get_all_recipes()
+    recipes = models.get_all_recipes(session["user_id"])
     cats = set()
     for r in recipes:
         for c in r.get("categories", []):
@@ -436,16 +537,18 @@ def api_get_categories():
 # ──────────────────────────────────────
 
 @app.route("/api/calendar", methods=["GET"])
+@login_required_api
 def api_get_calendar():
     year = request.args.get("year", type=int)
     month = request.args.get("month", type=int)
     if not year or not month:
         return jsonify({"error": "year and month are required"}), 400
-    entries = models.get_entries_for_month(year, month)
+    entries = models.get_entries_for_month(session["user_id"], year, month)
     return jsonify(entries)
 
 
 @app.route("/api/calendar/entries", methods=["POST"])
+@login_required_api
 def api_add_calendar_entry():
     data = request.get_json(force=True)
     entry_date = data.get("entry_date", "").strip()
@@ -457,63 +560,69 @@ def api_add_calendar_entry():
         return jsonify({"error": "entry_date and meal_type are required"}), 400
     if not recipe_id and not note:
         return jsonify({"error": "Either recipe_id or note is required"}), 400
-    entry_id = models.add_calendar_entry(entry_date, meal_type,
+    entry_id = models.add_calendar_entry(session["user_id"], entry_date, meal_type,
                                          recipe_id=recipe_id, note=note,
                                          servings=servings)
     return jsonify({"id": entry_id}), 201
 
 
 @app.route("/api/calendar/entries/<int:entry_id>", methods=["DELETE"])
+@login_required_api
 def api_remove_calendar_entry(entry_id):
-    models.remove_calendar_entry(entry_id)
+    models.remove_calendar_entry(session["user_id"], entry_id)
     return jsonify({"ok": True})
 
 
 @app.route("/api/calendar/entries/<int:entry_id>/move", methods=["PATCH"])
+@login_required_api
 def api_move_calendar_entry(entry_id):
     data = request.get_json(force=True)
     entry_date = data.get("entry_date", "").strip()
     meal_type = data.get("meal_type", "").lower()
     if not entry_date or not meal_type:
         return jsonify({"error": "entry_date and meal_type are required"}), 400
-    models.move_calendar_entry(entry_id, entry_date, meal_type)
+    models.move_calendar_entry(session["user_id"], entry_id, entry_date, meal_type)
     return jsonify({"ok": True})
 
 
 @app.route("/api/calendar/entries/<int:entry_id>/servings", methods=["PATCH"])
+@login_required_api
 def api_update_entry_servings(entry_id):
     data = request.get_json(force=True)
     servings = data.get("servings")
     if not servings or int(servings) < 1:
         return jsonify({"error": "servings must be >= 1"}), 400
-    models.update_calendar_entry_servings(entry_id, int(servings))
+    models.update_calendar_entry_servings(session["user_id"], entry_id, int(servings))
     return jsonify({"ok": True})
 
 
 @app.route("/api/calendar/entries/<int:entry_id>/note", methods=["PATCH"])
+@login_required_api
 def api_update_entry_note(entry_id):
     data = request.get_json(force=True)
     note = data.get("note", "").strip()
     if not note:
         return jsonify({"error": "note is required"}), 400
-    models.update_calendar_entry_note(entry_id, note)
+    models.update_calendar_entry_note(session["user_id"], entry_id, note)
     return jsonify({"ok": True})
 
 
 @app.route("/api/calendar/entries/<int:entry_id>/copy", methods=["POST"])
+@login_required_api
 def api_copy_calendar_entry(entry_id):
     data = request.get_json(force=True)
     entry_date = data.get("entry_date", "").strip()
     meal_type = data.get("meal_type", "").lower()
     if not entry_date or not meal_type:
         return jsonify({"error": "entry_date and meal_type are required"}), 400
-    new_id = models.copy_calendar_entry(entry_id, entry_date, meal_type)
+    new_id = models.copy_calendar_entry(session["user_id"], entry_id, entry_date, meal_type)
     if new_id is None:
         return jsonify({"error": "Entry not found"}), 404
     return jsonify({"id": new_id}), 201
 
 
 @app.route("/api/categorize-ingredient", methods=["POST"])
+@login_required_api
 def api_categorize_ingredient():
     data = request.get_json(force=True)
     text = data.get("text", "").strip()
@@ -523,48 +632,55 @@ def api_categorize_ingredient():
 
 
 @app.route("/api/custom-shopping-items", methods=["GET"])
+@login_required_api
 def api_get_custom_shopping_items():
-    return jsonify(models.get_custom_shopping_items())
+    return jsonify(models.get_custom_shopping_items(session["user_id"]))
 
 
 @app.route("/api/custom-shopping-items", methods=["POST"])
+@login_required_api
 def api_add_custom_shopping_item():
     data = request.get_json(force=True)
     text = data.get("text", "").strip()
     if not text:
         return jsonify({"error": "text is required"}), 400
     category = models.categorize_ingredient(text)
-    item_id = models.add_custom_shopping_item(text, category)
+    item_id = models.add_custom_shopping_item(session["user_id"], text, category)
     return jsonify({"id": item_id, "text": text, "category": category}), 201
 
 
 @app.route("/api/custom-shopping-items/<int:item_id>", methods=["DELETE"])
+@login_required_api
 def api_delete_custom_shopping_item(item_id):
-    models.delete_custom_shopping_item(item_id)
+    models.delete_custom_shopping_item(session["user_id"], item_id)
     return jsonify({"ok": True})
 
 
 @app.route("/api/custom-shopping-items", methods=["DELETE"])
+@login_required_api
 def api_clear_custom_shopping_items():
-    models.clear_custom_shopping_items()
+    models.clear_custom_shopping_items(session["user_id"])
     return jsonify({"ok": True})
 
 
 @app.route("/api/shopping-list", methods=["GET"])
+@login_required_api
 def api_shopping_list():
     start = request.args.get("start", "").strip()
     end = request.args.get("end", "").strip()
     if not start or not end:
         return jsonify({"error": "start and end dates are required"}), 400
-    items = models.get_shopping_list_for_range(start, end)
+    items = models.get_shopping_list_for_range(session["user_id"], start, end)
     return jsonify(items)
 
 
 @app.route("/api/fix-instructions", methods=["POST"])
+@login_required_api
 def api_fix_instructions():
     """Re-split recipes that have all instructions in a single step."""
+    user_id = session["user_id"]
     conn = models.get_db()
-    rows = conn.execute("SELECT id, instructions FROM recipes").fetchall()
+    rows = conn.execute("SELECT id, instructions FROM recipes WHERE user_id = ?", (user_id,)).fetchall()
     fixed = 0
     for row in rows:
         instr = json.loads(row["instructions"])
@@ -580,6 +696,7 @@ def api_fix_instructions():
 
 
 @app.route("/api/generate-meal-plan", methods=["POST"])
+@login_required_api
 def api_generate_meal_plan():
     """Take an AI-generated meal_plan object, save all recipes, create calendar entries."""
     from datetime import datetime, timedelta
@@ -587,6 +704,8 @@ def api_generate_meal_plan():
     entries = data.get("entries", [])
     if not entries:
         return jsonify({"error": "No entries provided"}), 400
+
+    user_id = session["user_id"]
 
     # Collect unique dates from entries, or default to next 7 days
     today = datetime.now().date()
@@ -605,6 +724,7 @@ def api_generate_meal_plan():
         ingredients = recipe_data.get("ingredients", [])
         instructions = recipe_data.get("instructions", [])
         recipe_id = models.create_recipe(
+            user_id,
             title=title,
             ingredients=ingredients if ingredients else [""],
             instructions=instructions if instructions else [""],
@@ -624,13 +744,14 @@ def api_generate_meal_plan():
                 servings_num = int(m.group(1))
         except Exception:
             pass
-        models.add_calendar_entry(day, meal, recipe_id=recipe_id, servings=servings_num)
+        models.add_calendar_entry(user_id, day, meal, recipe_id=recipe_id, servings=servings_num)
         saved.append({"title": title, "day": day, "meal": meal})
 
     return jsonify({"entries_created": len(saved), "saved": saved}), 201
 
 
 @app.route("/api/regenerate-recipe", methods=["POST"])
+@login_required_api
 def api_regenerate_recipe():
     """Ask AI to generate one replacement recipe for a specific meal slot."""
     client = _get_gemini()
@@ -655,7 +776,7 @@ def api_regenerate_recipe():
     )
 
     system = "You are a creative chef. Always use METRIC measurements. Every recipe must come from a real, well-known recipe website with a valid source_url. Never invent recipes. Return only valid JSON, no markdown fences."
-    lang = models.get_setting("language", "en")
+    lang = models.get_setting(session["user_id"], "language", "en")
     if lang == "fr":
         system += (
             " The user speaks French. Recipe title, ingredients, and instructions should be in French. "
@@ -773,6 +894,7 @@ def _scrape_image_url(url):
 
 
 @app.route("/api/scrape-recipe-image", methods=["POST"])
+@login_required_api
 def api_scrape_recipe_image():
     """Scrape the hero image from a recipe source URL with multiple fallbacks."""
     data = request.get_json(force=True)
@@ -852,6 +974,7 @@ Keep ingredient lists practical and instructions clear."""
 
 
 @app.route("/api/chat", methods=["POST"])
+@login_required_api
 def api_chat():
     client = _get_gemini()
     if client is None:
@@ -873,7 +996,7 @@ def api_chat():
     contents.append({"role": "user", "parts": [{"text": user_message}]})
 
     system = SYSTEM_PROMPT
-    lang = models.get_setting("language", "en")
+    lang = models.get_setting(session["user_id"], "language", "en")
     if lang == "fr":
         system += (
             "\n\nIMPORTANT: The user speaks French. Your 'message' field MUST be written in French. "
@@ -912,16 +1035,19 @@ def api_chat():
 # ──────────────────────────────────────
 
 @app.route("/api/settings", methods=["GET"])
+@login_required_api
 def api_get_settings():
-    return jsonify(models.get_settings())
+    return jsonify(models.get_settings(session["user_id"]))
 
 
 @app.route("/api/settings", methods=["PUT"])
+@login_required_api
 def api_update_settings():
     data = request.get_json(force=True)
+    user_id = session["user_id"]
     for key, value in data.items():
-        models.set_setting(key, str(value))
-    return jsonify(models.get_settings())
+        models.set_setting(user_id, key, str(value))
+    return jsonify(models.get_settings(user_id))
 
 
 # ──────────────────────────────────────

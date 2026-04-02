@@ -4,6 +4,17 @@
 
 const API = "";
 
+// ─── Auth: intercept 401 responses globally ───
+const _originalFetch = window.fetch;
+window.fetch = async function (...args) {
+    const res = await _originalFetch.apply(this, args);
+    if (res.status === 401) {
+        window.location = "/login";
+        return res;
+    }
+    return res;
+};
+
 // ─── State ───
 let calendarMonth = new Date();  // currently displayed month
 let calendarViewMode = "week";   // "week" or "month"
@@ -116,6 +127,24 @@ function initSettingsUI() {
 
 // Resolve initial view from URL on page load
 (async function initRouting() {
+    // Load user info for sidebar
+    try {
+        const meRes = await fetch(`${API}/api/me`);
+        if (meRes.ok) {
+            const user = await meRes.json();
+            const avatar = document.getElementById("sidebar-avatar");
+            const username = document.getElementById("sidebar-username");
+            if (user.picture) { avatar.src = user.picture; avatar.style.display = ""; }
+            if (user.name) username.textContent = user.name;
+        }
+    } catch (_) { /* will redirect on 401 via global fetch */ }
+
+    // Logout button
+    document.getElementById("btn-logout").addEventListener("click", async () => {
+        await fetch("/auth/logout", { method: "POST" });
+        window.location = "/login";
+    });
+
     // Load settings before first render so calendar uses correct week start
     await loadSettings();
     calendarWeekStart = getWeekStart(new Date());

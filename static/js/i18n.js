@@ -166,6 +166,11 @@ const TRANSLATIONS = {
     "settings.langEnglish": "English",
     "settings.langFrench": "Fran\u00E7ais",
 
+    // Auth
+    "auth.signInGoogle": "Sign in with Google",
+    "auth.signInPrompt": "Sign in to access your meal planner",
+    "auth.logout": "Log out",
+
     // Cooking mode
     "cooking.exit": "Exit",
     "cooking.ingredients": "Ingredients",
@@ -360,6 +365,11 @@ const TRANSLATIONS = {
     "settings.language": "Langue",
     "settings.langEnglish": "English",
     "settings.langFrench": "Fran\u00e7ais",
+
+    // Auth
+    "auth.signInGoogle": "Se connecter avec Google",
+    "auth.signInPrompt": "Connectez-vous pour acc\u00e9der \u00e0 votre planificateur de repas",
+    "auth.logout": "Se d\u00e9connecter",
 
     // Cooking mode
     "cooking.exit": "Quitter",

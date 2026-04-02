@@ -18,6 +18,15 @@ def get_db():
 def init_db():
     conn = get_db()
     conn.executescript("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            google_id TEXT UNIQUE NOT NULL,
+            email TEXT NOT NULL,
+            name TEXT,
+            picture TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE TABLE IF NOT EXISTS recipes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
@@ -28,6 +37,7 @@ def init_db():
             categories TEXT NOT NULL DEFAULT '[]',
             ingredients TEXT NOT NULL,
             instructions TEXT NOT NULL,
+            user_id INTEGER REFERENCES users(id),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
@@ -38,6 +48,7 @@ def init_db():
             recipe_id INTEGER,
             note TEXT,
             servings INTEGER NOT NULL DEFAULT 2,
+            user_id INTEGER REFERENCES users(id),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
         );
@@ -47,39 +58,107 @@ def init_db():
             text TEXT NOT NULL,
             category TEXT NOT NULL DEFAULT 'Other',
             checked INTEGER NOT NULL DEFAULT 0,
+            user_id INTEGER REFERENCES users(id),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            key TEXT NOT NULL,
+            value TEXT NOT NULL,
+            PRIMARY KEY (user_id, key)
         );
     """)
+    # Migration: add user_id column to existing tables that lack it
+    for table in ("recipes", "calendar_entries", "custom_shopping_items"):
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN user_id INTEGER REFERENCES users(id)")
+        except Exception:
+            pass  # column already exists
+    # Migrate old settings table (key PK) to new schema (user_id+key PK)
+    try:
+        cur = conn.execute("PRAGMA table_info(settings)")
+        cols = [row[1] for row in cur.fetchall()]
+        if "user_id" not in cols:
+            conn.execute("ALTER TABLE settings RENAME TO settings_old")
+            conn.execute("""
+                CREATE TABLE settings (
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    key TEXT NOT NULL,
+                    value TEXT NOT NULL,
+                    PRIMARY KEY (user_id, key)
+                )
+            """)
+            conn.execute("DROP TABLE settings_old")
+    except Exception:
+        pass
+    conn.commit()
+    conn.close()
+
+
+# ---------- Users ----------
+
+def get_or_create_user(google_id, email, name=None, picture=None):
+    """Find an existing user by google_id or create a new one. Returns user dict."""
+    conn = get_db()
+    row = conn.execute("SELECT * FROM users WHERE google_id = ?", (google_id,)).fetchone()
+    if row:
+        # Update profile info in case it changed
+        conn.execute(
+            "UPDATE users SET email = ?, name = ?, picture = ? WHERE id = ?",
+            (email, name, picture, row["id"]),
+        )
+        conn.commit()
+        user_id = row["id"]
+    else:
+        cur = conn.execute(
+            "INSERT INTO users (google_id, email, name, picture) VALUES (?, ?, ?, ?)",
+            (google_id, email, name, picture),
+        )
+        conn.commit()
+        user_id = cur.lastrowid
+    user = dict(conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone())
+    conn.close()
+    return user
+
+
+def get_user_by_id(user_id):
+    conn = get_db()
+    row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def adopt_orphan_data(user_id):
+    """Assign all rows with user_id IS NULL to the given user. Called on first login."""
+    conn = get_db()
+    for table in ("recipes", "calendar_entries", "custom_shopping_items"):
+        conn.execute(f"UPDATE {table} SET user_id = ? WHERE user_id IS NULL", (user_id,))
     conn.commit()
     conn.close()
 
 
 # ---------- Settings ----------
 
-def get_settings():
+def get_settings(user_id):
     conn = get_db()
-    rows = conn.execute("SELECT key, value FROM settings").fetchall()
+    rows = conn.execute("SELECT key, value FROM settings WHERE user_id = ?", (user_id,)).fetchall()
     conn.close()
     return {r["key"]: r["value"] for r in rows}
 
 
-def get_setting(key, default=None):
+def get_setting(user_id, key, default=None):
     conn = get_db()
-    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    row = conn.execute("SELECT value FROM settings WHERE user_id = ? AND key = ?", (user_id, key)).fetchone()
     conn.close()
     return row["value"] if row else default
 
 
-def set_setting(key, value):
+def set_setting(user_id, key, value):
     conn = get_db()
     conn.execute(
-        "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?",
-        (key, value, value),
+        "INSERT INTO settings (user_id, key, value) VALUES (?, ?, ?) ON CONFLICT(user_id, key) DO UPDATE SET value = ?",
+        (user_id, key, value, value),
     )
     conn.commit()
     conn.close()
@@ -87,15 +166,15 @@ def set_setting(key, value):
 
 # ---------- Recipe CRUD ----------
 
-def create_recipe(title, ingredients, instructions, source_url=None,
+def create_recipe(user_id, title, ingredients, instructions, source_url=None,
                   image_url=None, total_time=None, servings=None, categories=None):
     conn = get_db()
     cur = conn.execute(
         """INSERT INTO recipes (title, source_url, image_url, total_time,
-           servings, categories, ingredients, instructions)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+           servings, categories, ingredients, instructions, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (title, source_url, image_url, total_time, servings,
-         json.dumps(categories or []), json.dumps(ingredients), json.dumps(instructions))
+         json.dumps(categories or []), json.dumps(ingredients), json.dumps(instructions), user_id)
     )
     conn.commit()
     recipe_id = cur.lastrowid
@@ -103,50 +182,50 @@ def create_recipe(title, ingredients, instructions, source_url=None,
     return recipe_id
 
 
-def get_recipe(recipe_id):
+def get_recipe(user_id, recipe_id):
     conn = get_db()
-    row = conn.execute("SELECT * FROM recipes WHERE id = ?", (recipe_id,)).fetchone()
+    row = conn.execute("SELECT * FROM recipes WHERE id = ? AND user_id = ?", (recipe_id, user_id)).fetchone()
     conn.close()
     if row is None:
         return None
     return _recipe_row_to_dict(row)
 
 
-def get_all_recipes():
+def get_all_recipes(user_id):
     conn = get_db()
-    rows = conn.execute("SELECT * FROM recipes ORDER BY created_at DESC").fetchall()
+    rows = conn.execute("SELECT * FROM recipes WHERE user_id = ? ORDER BY created_at DESC", (user_id,)).fetchall()
     conn.close()
     return [_recipe_row_to_dict(r) for r in rows]
 
 
-def delete_recipe(recipe_id):
+def delete_recipe(user_id, recipe_id):
     conn = get_db()
-    conn.execute("DELETE FROM recipes WHERE id = ?", (recipe_id,))
+    conn.execute("DELETE FROM recipes WHERE id = ? AND user_id = ?", (recipe_id, user_id))
     conn.commit()
     conn.close()
 
 
-def delete_recipes_bulk(recipe_ids):
+def delete_recipes_bulk(user_id, recipe_ids):
     if not recipe_ids:
         return
     conn = get_db()
     placeholders = ",".join("?" for _ in recipe_ids)
-    conn.execute(f"DELETE FROM recipes WHERE id IN ({placeholders})", recipe_ids)
+    conn.execute(f"DELETE FROM recipes WHERE id IN ({placeholders}) AND user_id = ?", [*recipe_ids, user_id])
     conn.commit()
     conn.close()
 
 
-def update_recipe(recipe_id, title, ingredients, instructions,
+def update_recipe(user_id, recipe_id, title, ingredients, instructions,
                   source_url=None, image_url=None, total_time=None,
                   servings=None, categories=None):
     conn = get_db()
     conn.execute(
         """UPDATE recipes SET title=?, source_url=?, image_url=?,
            total_time=?, servings=?, categories=?, ingredients=?, instructions=?
-           WHERE id=?""",
+           WHERE id=? AND user_id=?""",
         (title, source_url, image_url, total_time, servings,
          json.dumps(categories or []), json.dumps(ingredients),
-         json.dumps(instructions), recipe_id))
+         json.dumps(instructions), recipe_id, user_id))
     conn.commit()
     conn.close()
 
@@ -175,14 +254,14 @@ def _recipe_row_to_dict(row):
 
 # ---------- Calendar CRUD ----------
 
-def get_entries_for_month(year, month):
+def get_entries_for_month(user_id, year, month):
     """Return all calendar entries for a given year/month, joined with recipe info."""
     first_day = date(year, month, 1)
     last_day = date(year, month, _calendar.monthrange(year, month)[1])
-    return get_entries_for_range(first_day.isoformat(), last_day.isoformat())
+    return get_entries_for_range(user_id, first_day.isoformat(), last_day.isoformat())
 
 
-def get_entries_for_range(start_date, end_date):
+def get_entries_for_range(user_id, start_date, end_date):
     """Return all calendar entries between start_date and end_date (inclusive)."""
     conn = get_db()
     rows = conn.execute("""
@@ -191,22 +270,22 @@ def get_entries_for_range(start_date, end_date):
                r.title as recipe_title, r.image_url, r.servings as recipe_servings
         FROM calendar_entries ce
         LEFT JOIN recipes r ON r.id = ce.recipe_id
-        WHERE ce.entry_date >= ? AND ce.entry_date <= ?
+        WHERE ce.user_id = ? AND ce.entry_date >= ? AND ce.entry_date <= ?
         ORDER BY ce.entry_date,
             CASE ce.meal_type
                 WHEN 'lunch' THEN 1 WHEN 'dinner' THEN 2 END
-    """, (start_date, end_date)).fetchall()
+    """, (user_id, start_date, end_date)).fetchall()
     conn.close()
     return [dict(e) for e in rows]
 
 
-def add_calendar_entry(entry_date, meal_type, recipe_id=None, note=None, servings=2):
+def add_calendar_entry(user_id, entry_date, meal_type, recipe_id=None, note=None, servings=2):
     conn = get_db()
     cur = conn.execute(
         """INSERT INTO calendar_entries
-           (entry_date, meal_type, recipe_id, note, servings)
-           VALUES (?, ?, ?, ?, ?)""",
-        (entry_date, meal_type, recipe_id, note, servings)
+           (entry_date, meal_type, recipe_id, note, servings, user_id)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (entry_date, meal_type, recipe_id, note, servings, user_id)
     )
     conn.commit()
     entry_id = cur.lastrowid
@@ -214,56 +293,56 @@ def add_calendar_entry(entry_date, meal_type, recipe_id=None, note=None, serving
     return entry_id
 
 
-def remove_calendar_entry(entry_id):
+def remove_calendar_entry(user_id, entry_id):
     conn = get_db()
-    conn.execute("DELETE FROM calendar_entries WHERE id = ?", (entry_id,))
+    conn.execute("DELETE FROM calendar_entries WHERE id = ? AND user_id = ?", (entry_id, user_id))
     conn.commit()
     conn.close()
 
 
-def move_calendar_entry(entry_id, entry_date, meal_type):
+def move_calendar_entry(user_id, entry_id, entry_date, meal_type):
     conn = get_db()
     conn.execute(
-        "UPDATE calendar_entries SET entry_date = ?, meal_type = ? WHERE id = ?",
-        (entry_date, meal_type, entry_id)
+        "UPDATE calendar_entries SET entry_date = ?, meal_type = ? WHERE id = ? AND user_id = ?",
+        (entry_date, meal_type, entry_id, user_id)
     )
     conn.commit()
     conn.close()
 
 
-def update_calendar_entry_servings(entry_id, servings):
+def update_calendar_entry_servings(user_id, entry_id, servings):
     conn = get_db()
     conn.execute(
-        "UPDATE calendar_entries SET servings = ? WHERE id = ?",
-        (servings, entry_id)
+        "UPDATE calendar_entries SET servings = ? WHERE id = ? AND user_id = ?",
+        (servings, entry_id, user_id)
     )
     conn.commit()
     conn.close()
 
 
-def update_calendar_entry_note(entry_id, note):
+def update_calendar_entry_note(user_id, entry_id, note):
     conn = get_db()
     conn.execute(
-        "UPDATE calendar_entries SET note = ? WHERE id = ?",
-        (note, entry_id)
+        "UPDATE calendar_entries SET note = ? WHERE id = ? AND user_id = ?",
+        (note, entry_id, user_id)
     )
     conn.commit()
     conn.close()
 
 
-def copy_calendar_entry(entry_id, entry_date, meal_type):
+def copy_calendar_entry(user_id, entry_id, entry_date, meal_type):
     conn = get_db()
     row = conn.execute(
-        "SELECT * FROM calendar_entries WHERE id = ?", (entry_id,)
+        "SELECT * FROM calendar_entries WHERE id = ? AND user_id = ?", (entry_id, user_id)
     ).fetchone()
     if row is None:
         conn.close()
         return None
     cur = conn.execute(
         """INSERT INTO calendar_entries
-           (entry_date, meal_type, recipe_id, note, servings)
-           VALUES (?, ?, ?, ?, ?)""",
-        (entry_date, meal_type, row["recipe_id"], row["note"], row["servings"])
+           (entry_date, meal_type, recipe_id, note, servings, user_id)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (entry_date, meal_type, row["recipe_id"], row["note"], row["servings"], user_id)
     )
     conn.commit()
     new_id = cur.lastrowid
@@ -357,18 +436,18 @@ def categorize_ingredient(text):
 
 # ---------- Custom Shopping Items ----------
 
-def get_custom_shopping_items():
+def get_custom_shopping_items(user_id):
     conn = get_db()
-    rows = conn.execute("SELECT id, text, category, checked FROM custom_shopping_items ORDER BY created_at").fetchall()
+    rows = conn.execute("SELECT id, text, category, checked FROM custom_shopping_items WHERE user_id = ? ORDER BY created_at", (user_id,)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
 
-def add_custom_shopping_item(text, category="Other"):
+def add_custom_shopping_item(user_id, text, category="Other"):
     conn = get_db()
     cur = conn.execute(
-        "INSERT INTO custom_shopping_items (text, category) VALUES (?, ?)",
-        (text, category)
+        "INSERT INTO custom_shopping_items (text, category, user_id) VALUES (?, ?, ?)",
+        (text, category, user_id)
     )
     conn.commit()
     item_id = cur.lastrowid
@@ -376,21 +455,21 @@ def add_custom_shopping_item(text, category="Other"):
     return item_id
 
 
-def delete_custom_shopping_item(item_id):
+def delete_custom_shopping_item(user_id, item_id):
     conn = get_db()
-    conn.execute("DELETE FROM custom_shopping_items WHERE id = ?", (item_id,))
+    conn.execute("DELETE FROM custom_shopping_items WHERE id = ? AND user_id = ?", (item_id, user_id))
     conn.commit()
     conn.close()
 
 
-def clear_custom_shopping_items():
+def clear_custom_shopping_items(user_id):
     conn = get_db()
-    conn.execute("DELETE FROM custom_shopping_items")
+    conn.execute("DELETE FROM custom_shopping_items WHERE user_id = ?", (user_id,))
     conn.commit()
     conn.close()
 
 
-def get_shopping_list_for_range(start_date, end_date):
+def get_shopping_list_for_range(user_id, start_date, end_date):
     """Aggregate all ingredients across calendar entries in the date range, scaled by servings."""
     conn = get_db()
     rows = conn.execute("""
@@ -398,9 +477,9 @@ def get_shopping_list_for_range(start_date, end_date):
                ce.servings as planned_servings
         FROM calendar_entries ce
         JOIN recipes r ON r.id = ce.recipe_id
-        WHERE ce.entry_date >= ? AND ce.entry_date <= ?
+        WHERE ce.user_id = ? AND ce.entry_date >= ? AND ce.entry_date <= ?
               AND ce.recipe_id IS NOT NULL
-    """, (start_date, end_date)).fetchall()
+    """, (user_id, start_date, end_date)).fetchall()
     conn.close()
 
     # Merge map: normalised_name -> { qty, unit, raw_name, recipes }
