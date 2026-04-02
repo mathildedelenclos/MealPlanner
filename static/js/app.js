@@ -1217,19 +1217,13 @@ function openEntryContextMenu(entry) {
             <div class="ctx-divider"></div>`;
     }
 
-    let editNoteHtml = "";
-    if (isNote) {
-        editNoteHtml = `<button class="ctx-action ctx-edit-note">✏️ ${t("ctx.edit")}</button>`;
-    }
-
     let copyHtml = "";
-    if (isRecipe) {
+    if (isRecipe || isNote) {
         copyHtml = `<button class="ctx-action ctx-copy">📋 ${t("ctx.copyTo")}</button>`;
     }
 
     menu.innerHTML = `
         ${servingsHtml}
-        ${editNoteHtml}
         ${copyHtml}
         <button class="ctx-action ctx-remove">🗑 ${t("ctx.remove")}</button>`;
 
@@ -1255,21 +1249,12 @@ function openEntryContextMenu(entry) {
         });
     }
 
-    // Copy handler (recipes only)
-    if (isRecipe) {
+    // Copy handler (recipes and notes)
+    if (isRecipe || isNote) {
         menu.querySelector(".ctx-copy").addEventListener("click", (e) => {
             e.stopPropagation();
             closeMenu();
             openCopyModal(parseInt(entryId));
-        });
-    }
-
-    // Edit note handler
-    if (isNote) {
-        menu.querySelector(".ctx-edit-note").addEventListener("click", (e) => {
-            e.stopPropagation();
-            closeMenu();
-            openEditNoteModal(parseInt(entryId), entry.dataset.note || "");
         });
     }
 
