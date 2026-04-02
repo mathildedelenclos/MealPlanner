@@ -8,6 +8,7 @@ import threading
 import requests
 from functools import wraps
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
 from recipe_scrapers import scrape_html
 from google import genai
@@ -18,6 +19,7 @@ import models
 load_dotenv()
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key")
 
 # ──────────────────────────────────────
