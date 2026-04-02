@@ -7,8 +7,9 @@ const API = "";
 // ─── State ───
 let calendarMonth = new Date();  // currently displayed month
 let calendarViewMode = "week";   // "week" or "month"
-let calendarWeekStart = getMonday(new Date()); // Monday of current week
+let calendarWeekStart = null;    // set after settings load
 let chatHistory = [];
+let weekStartDay = 1;            // 0=Sun, 1=Mon, 6=Sat (loaded from settings)
 
 // ─── DOM Helpers ───
 const $ = (sel) => document.querySelector(sel);
@@ -26,6 +27,7 @@ const PATH_TO_VIEW = {
     "/recipes": "recipes",
     "/shopping": "shopping",
     "/chat": "chat",
+    "/settings": "settings",
 };
 
 const VIEW_TO_PATH = {
@@ -33,6 +35,7 @@ const VIEW_TO_PATH = {
     "recipes": "/recipes",
     "shopping": "/shopping",
     "chat": "/chat",
+    "settings": "/settings",
 };
 
 function navigateToView(view, pushState = true) {
@@ -66,8 +69,39 @@ window.addEventListener("popstate", (e) => {
     navigateToView(view, false);
 });
 
+// ─── Settings ───
+async function loadSettings() {
+    try {
+        const res = await fetch(`${API}/api/settings`);
+        const data = await res.json();
+        if (data.week_start_day !== undefined) {
+            weekStartDay = parseInt(data.week_start_day);
+        }
+    } catch (e) { /* use defaults */ }
+}
+
+function initSettingsUI() {
+    const select = $("#setting-week-start");
+    if (!select) return;
+    select.value = String(weekStartDay);
+    select.addEventListener("change", async () => {
+        weekStartDay = parseInt(select.value);
+        await fetch(`${API}/api/settings`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ week_start_day: weekStartDay }),
+        });
+        calendarWeekStart = getWeekStart(new Date());
+    });
+}
+
 // Resolve initial view from URL on page load
-(function initRouting() {
+(async function initRouting() {
+    // Load settings before first render so calendar uses correct week start
+    await loadSettings();
+    calendarWeekStart = getWeekStart(new Date());
+    initSettingsUI();
+
     const view = PATH_TO_VIEW[location.pathname] || "meal-plans";
     navigateToView(view, false);
     // Replace current history entry so back button works correctly
@@ -877,21 +911,21 @@ $("#btn-save-scraped").addEventListener("click", async () => {
 const MEALS = ["lunch", "dinner"];
 
 // Get Monday of a given date's week
-function getMonday(d) {
+function getWeekStart(d) {
     const date = new Date(d);
     const day = date.getDay();
-    const diff = day === 0 ? -6 : 1 - day;
-    date.setDate(date.getDate() + diff);
+    const diff = (day - weekStartDay + 7) % 7;
+    date.setDate(date.getDate() - diff);
     date.setHours(0, 0, 0, 0);
     return date;
 }
 
-// Get 7 dates for a week starting from Monday
-function getWeekGridDates(monday) {
+// Get 7 dates for a week starting from the configured start day
+function getWeekGridDates(start) {
     const dates = [];
     for (let i = 0; i < 7; i++) {
-        const d = new Date(monday);
-        d.setDate(monday.getDate() + i);
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
         dates.push(d);
     }
     return dates;
@@ -902,9 +936,8 @@ function getCalendarGridDates(year, month) {
     // month is 0-indexed
     const first = new Date(year, month, 1);
     const last = new Date(year, month + 1, 0);
-    // Start from Monday (ISO week)
-    let startDay = first.getDay(); // 0=Sun
-    startDay = startDay === 0 ? 6 : startDay - 1; // convert so Mon=0
+    // Start from configured week start day
+    let startDay = (first.getDay() - weekStartDay + 7) % 7;
     const startDate = new Date(year, month, 1 - startDay);
     const dates = [];
     // Always show 6 rows (42 cells) to keep grid consistent
@@ -982,7 +1015,8 @@ async function loadCalendarWeek() {
             mealEntries.forEach((e) => {
                 if (e.note) {
                     html += `<div class="cal-entry cal-entry-note" draggable="true"
-                                  data-entry-id="${e.id}" data-entry-type="note">
+                                  data-entry-id="${e.id}" data-entry-type="note"
+                                  data-note="${escHtml(e.note)}">
                         <span class="cal-entry-text">📝 ${escHtml(e.note)}</span>
                     </div>`;
                 } else {
@@ -1057,9 +1091,10 @@ async function loadCalendarMonth() {
     grid.className = "calendar-month-grid";
 
     let html = `<div class="cal-weekday-header">`;
-    ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].forEach(d => {
-        html += `<div class="cal-wh">${d}</div>`;
-    });
+    const dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    for (let i = 0; i < 7; i++) {
+        html += `<div class="cal-wh">${dayNames[(weekStartDay + i) % 7]}</div>`;
+    }
     html += `</div><div class="cal-grid-body">`;
 
     gridDates.forEach((dateObj, idx) => {
@@ -1078,7 +1113,8 @@ async function loadCalendarMonth() {
             mealEntries.forEach((e) => {
                 if (e.note) {
                     html += `<div class="cal-entry cal-entry-note" draggable="true"
-                                  data-entry-id="${e.id}" data-entry-type="note">
+                                  data-entry-id="${e.id}" data-entry-type="note"
+                                  data-note="${escHtml(e.note)}">
                         <span class="cal-entry-text">📝 ${escHtml(e.note)}</span>
                     </div>`;
                 } else {
@@ -1111,6 +1147,7 @@ function openEntryContextMenu(entry) {
 
     const entryId = entry.dataset.entryId;
     const isRecipe = entry.dataset.entryType === "recipe";
+    const isNote = entry.dataset.entryType === "note";
     let currentServings = parseInt(entry.dataset.servings) || 2;
     const origServings = currentServings;
 
@@ -1131,9 +1168,20 @@ function openEntryContextMenu(entry) {
             <div class="ctx-divider"></div>`;
     }
 
+    let editNoteHtml = "";
+    if (isNote) {
+        editNoteHtml = `<button class="ctx-action ctx-edit-note">✏️ Edit</button>`;
+    }
+
+    let copyHtml = "";
+    if (isRecipe) {
+        copyHtml = `<button class="ctx-action ctx-copy">📋 Copy to…</button>`;
+    }
+
     menu.innerHTML = `
         ${servingsHtml}
-        <button class="ctx-action ctx-copy">📋 Copy to…</button>
+        ${editNoteHtml}
+        ${copyHtml}
         <button class="ctx-action ctx-remove">🗑 Remove</button>`;
 
     entry.appendChild(menu);
@@ -1158,12 +1206,23 @@ function openEntryContextMenu(entry) {
         });
     }
 
-    // Copy handler
-    menu.querySelector(".ctx-copy").addEventListener("click", (e) => {
-        e.stopPropagation();
-        closeMenu();
-        openCopyModal(parseInt(entryId));
-    });
+    // Copy handler (recipes only)
+    if (isRecipe) {
+        menu.querySelector(".ctx-copy").addEventListener("click", (e) => {
+            e.stopPropagation();
+            closeMenu();
+            openCopyModal(parseInt(entryId));
+        });
+    }
+
+    // Edit note handler
+    if (isNote) {
+        menu.querySelector(".ctx-edit-note").addEventListener("click", (e) => {
+            e.stopPropagation();
+            closeMenu();
+            openEditNoteModal(parseInt(entryId), entry.dataset.note || "");
+        });
+    }
 
     // Remove handler
     menu.querySelector(".ctx-remove").addEventListener("click", async (e) => {
@@ -1202,6 +1261,45 @@ function openEntryContextMenu(entry) {
     menu.addEventListener("mouseleave", startLeaveTimer);
 }
 
+// ── Edit note modal ──
+function openEditNoteModal(entryId, currentNote) {
+    const overlay = document.createElement("div");
+    overlay.className = "modal";
+    overlay.innerHTML = `
+        <div class="modal-overlay"></div>
+        <div class="modal-content card" style="max-width:420px">
+            <button class="modal-close edit-note-close">&times;</button>
+            <h3 style="margin-bottom:12px">Edit Note</h3>
+            <textarea class="input edit-note-input" rows="3">${escHtml(currentNote)}</textarea>
+            <div class="form-actions" style="margin-top:12px">
+                <button class="btn btn-primary edit-note-save">Save</button>
+                <button class="btn btn-ghost edit-note-cancel">Cancel</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+
+    const input = overlay.querySelector(".edit-note-input");
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+
+    function close() { overlay.remove(); }
+    overlay.querySelector(".modal-overlay").addEventListener("click", close);
+    overlay.querySelector(".edit-note-close").addEventListener("click", close);
+    overlay.querySelector(".edit-note-cancel").addEventListener("click", close);
+
+    overlay.querySelector(".edit-note-save").addEventListener("click", async () => {
+        const note = input.value.trim();
+        if (!note) { alert("Please enter a note."); return; }
+        await fetch(`${API}/api/calendar/entries/${entryId}/note`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ note }),
+        });
+        close();
+        loadCalendar();
+    });
+}
+
 function bindCalendarEvents(grid) {
     // Bind add buttons
     grid.querySelectorAll(".cal-add-btn").forEach((btn) => {
@@ -1224,6 +1322,14 @@ function bindCalendarEvents(grid) {
             const entryId = link.dataset.entryId;
             const servings = link.dataset.servings ? parseInt(link.dataset.servings) : null;
             if (recipeId) openRecipeModal(recipeId, entryId, servings);
+        });
+    });
+
+    // Bind note click → edit
+    grid.querySelectorAll(".cal-entry-note").forEach((entry) => {
+        entry.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            openEditNoteModal(parseInt(entry.dataset.entryId), entry.dataset.note || "");
         });
     });
 
@@ -1339,7 +1445,7 @@ $("#cal-next").addEventListener("click", () => {
 });
 $("#cal-today").addEventListener("click", () => {
     calendarMonth = new Date();
-    calendarWeekStart = getMonday(new Date());
+    calendarWeekStart = getWeekStart(new Date());
     loadCalendar();
 });
 
@@ -1347,7 +1453,7 @@ $("#cal-today").addEventListener("click", () => {
 $("#cal-view-week").addEventListener("click", () => {
     if (calendarViewMode === "week") return;
     calendarViewMode = "week";
-    calendarWeekStart = getMonday(new Date());
+    calendarWeekStart = getWeekStart(new Date());
     $("#cal-view-week").classList.add("active");
     $("#cal-view-month").classList.remove("active");
     loadCalendar();
@@ -1364,9 +1470,9 @@ $("#cal-view-month").addEventListener("click", () => {
 // ── Assign recipe to calendar modal ──
 function openAssignToCalendarModal(recipeId, title, defaultServings) {
     // Default to following week
-    const nextMonday = getMonday(new Date());
-    nextMonday.setDate(nextMonday.getDate() + 7);
-    let weekStart = nextMonday;
+    const nextWeekStart = getWeekStart(new Date());
+    nextWeekStart.setDate(nextWeekStart.getDate() + 7);
+    let weekStart = nextWeekStart;
 
     function renderGrid(modal) {
         const weekDates = getWeekGridDates(weekStart);
@@ -1472,7 +1578,7 @@ function openAssignToCalendarModal(recipeId, title, defaultServings) {
 
 // ── Copy-to picker modal ──
 function openCopyModal(entryId) {
-    const weekDates = getWeekGridDates(calendarViewMode === "week" ? calendarWeekStart : getMonday(new Date()));
+    const weekDates = getWeekGridDates(calendarViewMode === "week" ? calendarWeekStart : getWeekStart(new Date()));
     const uniqueDates = weekDates.map(d => isoDate(d));
 
     const modal = document.createElement("div");

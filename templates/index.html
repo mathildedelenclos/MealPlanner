@@ -20,6 +20,7 @@
             <li><a href="/recipes" class="nav-link" data-view="recipes">📖 Recipes</a></li>
             <li><a href="/shopping" class="nav-link" data-view="shopping">🛒 Shopping</a></li>
             <li><a href="/chat" class="nav-link" data-view="chat">🤖 AI Chef</a></li>
+            <li><a href="/settings" class="nav-link" data-view="settings">⚙️ Settings</a></li>
         </ul>
     </nav>
 
@@ -207,6 +208,23 @@
                 <div class="chat-input-area">
                     <textarea id="chat-input" placeholder="e.g. Suggest 3 healthy dinners for this week…" class="input textarea" rows="2"></textarea>
                     <button class="btn btn-primary" id="btn-send-chat">Send</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ SETTINGS VIEW ═══ -->
+        <section id="view-settings" class="view">
+            <div class="view-header">
+                <h2>Settings</h2>
+            </div>
+            <div class="settings-card card">
+                <div class="settings-row">
+                    <label class="settings-label" for="setting-week-start">Week starts on</label>
+                    <select id="setting-week-start" class="input input-select">
+                        <option value="1">Monday</option>
+                        <option value="0">Sunday</option>
+                        <option value="6">Saturday</option>
+                    </select>
                 </div>
             </div>
         </section>

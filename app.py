@@ -82,6 +82,7 @@ def _get_gemini():
 @app.route("/recipes")
 @app.route("/shopping")
 @app.route("/chat")
+@app.route("/settings")
 def index():
     return render_template("index.html")
 
@@ -489,6 +490,16 @@ def api_update_entry_servings(entry_id):
     return jsonify({"ok": True})
 
 
+@app.route("/api/calendar/entries/<int:entry_id>/note", methods=["PATCH"])
+def api_update_entry_note(entry_id):
+    data = request.get_json(force=True)
+    note = data.get("note", "").strip()
+    if not note:
+        return jsonify({"error": "note is required"}), 400
+    models.update_calendar_entry_note(entry_id, note)
+    return jsonify({"ok": True})
+
+
 @app.route("/api/calendar/entries/<int:entry_id>/copy", methods=["POST"])
 def api_copy_calendar_entry(entry_id):
     data = request.get_json(force=True)
@@ -877,6 +888,23 @@ def api_chat():
 
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
+
+
+# ──────────────────────────────────────
+# Settings API
+# ──────────────────────────────────────
+
+@app.route("/api/settings", methods=["GET"])
+def api_get_settings():
+    return jsonify(models.get_settings())
+
+
+@app.route("/api/settings", methods=["PUT"])
+def api_update_settings():
+    data = request.get_json(force=True)
+    for key, value in data.items():
+        models.set_setting(key, str(value))
+    return jsonify(models.get_settings())
 
 
 # ──────────────────────────────────────

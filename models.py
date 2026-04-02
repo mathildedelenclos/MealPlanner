@@ -49,7 +49,38 @@ def init_db():
             checked INTEGER NOT NULL DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
     """)
+    conn.commit()
+    conn.close()
+
+
+# ---------- Settings ----------
+
+def get_settings():
+    conn = get_db()
+    rows = conn.execute("SELECT key, value FROM settings").fetchall()
+    conn.close()
+    return {r["key"]: r["value"] for r in rows}
+
+
+def get_setting(key, default=None):
+    conn = get_db()
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    conn.close()
+    return row["value"] if row else default
+
+
+def set_setting(key, value):
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?",
+        (key, value, value),
+    )
     conn.commit()
     conn.close()
 
@@ -205,6 +236,16 @@ def update_calendar_entry_servings(entry_id, servings):
     conn.execute(
         "UPDATE calendar_entries SET servings = ? WHERE id = ?",
         (servings, entry_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def update_calendar_entry_note(entry_id, note):
+    conn = get_db()
+    conn.execute(
+        "UPDATE calendar_entries SET note = ? WHERE id = ?",
+        (note, entry_id)
     )
     conn.commit()
     conn.close()
