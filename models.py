@@ -418,17 +418,18 @@ def get_shopping_list_for_range(start_date, end_date):
 
         for ing in ingredients:
             qty, unit, name = _parse_ingredient(ing)
+            clean_name = _clean_ingredient_name(name)
             norm = _normalise_name(name)
             if not norm:
                 norm = ing.strip().lower()
-                name = ing.strip()
+                clean_name = ing.strip()
 
             # Use unit-qualified key so "400g tomatoes" and "1 can tomatoes" stay separate
             unit_key = (unit or "").lower()
             key = f"{norm}||{unit_key}"
 
             if key not in merge_map:
-                merge_map[key] = {"qty": None, "unit": unit, "name": name, "recipes": []}
+                merge_map[key] = {"qty": None, "unit": unit, "name": clean_name, "recipes": []}
                 merge_order.append(key)
 
             entry = merge_map[key]
@@ -527,6 +528,19 @@ def _normalise_name(name):
         elif n.endswith('s') and not n.endswith('ss'):
             n = n[:-1]       # onions → onion
     return n.strip()
+
+
+def _clean_ingredient_name(name):
+    """Strip preparation instructions from an ingredient name for display.
+    E.g. 'aubergines, cut into 3cm chunks' → 'aubergines'
+    """
+    if not name:
+        return name
+    # Strip everything after a comma (prep instructions)
+    n = _re.split(r',\s*', name)[0]
+    # Strip parenthetical prep notes like "(diced)"
+    n = _re.sub(r'\s*\(.*?\)\s*', ' ', n).strip()
+    return n
 
 
 def _units_compatible(u1, u2):

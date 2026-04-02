@@ -13,14 +13,14 @@
     <nav class="sidebar">
         <div class="sidebar-header">
             <span class="logo">🍽️</span>
-            <h1>Meal Planner</h1>
+            <h1 data-i18n="app.title">Meal Planner</h1>
         </div>
         <ul class="nav-links">
-            <li><a href="/calendar" class="nav-link" data-view="meal-plans">📅 Calendar</a></li>
-            <li><a href="/recipes" class="nav-link" data-view="recipes">📖 Recipes</a></li>
-            <li><a href="/shopping" class="nav-link" data-view="shopping">🛒 Shopping</a></li>
-            <li><a href="/chat" class="nav-link" data-view="chat">🤖 AI Chef</a></li>
-            <li><a href="/settings" class="nav-link" data-view="settings">⚙️ Settings</a></li>
+            <li><a href="/calendar" class="nav-link" data-view="meal-plans">📅 <span data-i18n="nav.calendar">Calendar</span></a></li>
+            <li><a href="/recipes" class="nav-link" data-view="recipes">📖 <span data-i18n="nav.recipes">Recipes</span></a></li>
+            <li><a href="/shopping" class="nav-link" data-view="shopping">🛒 <span data-i18n="nav.shopping">Shopping</span></a></li>
+            <li><a href="/chat" class="nav-link" data-view="chat">🤖 <span data-i18n="nav.chat">AI Chef</span></a></li>
+            <li><a href="/settings" class="nav-link" data-view="settings">⚙️ <span data-i18n="nav.settings">Settings</span></a></li>
         </ul>
     </nav>
 
@@ -30,7 +30,7 @@
         <!-- ═══ CALENDAR VIEW ═══ -->
         <section id="view-meal-plans" class="view">
             <div class="view-header">
-                <h2>Calendar</h2>
+                <h2 data-i18n="calendar.title">Calendar</h2>
             </div>
 
             <!-- Month calendar -->
@@ -38,10 +38,10 @@
                 <button class="btn btn-ghost" id="cal-prev">&lsaquo;</button>
                 <h3 id="cal-month-label"></h3>
                 <button class="btn btn-ghost" id="cal-next">&rsaquo;</button>
-                <button class="btn btn-ghost btn-small" id="cal-today" style="margin-left:12px">Today</button>
+                <button class="btn btn-ghost btn-small" id="cal-today" style="margin-left:12px" data-i18n="calendar.today">Today</button>
                 <div class="cal-view-toggle">
-                    <button class="btn btn-small cal-view-btn active" id="cal-view-week">Week</button>
-                    <button class="btn btn-small cal-view-btn" id="cal-view-month">Month</button>
+                    <button class="btn btn-small cal-view-btn active" id="cal-view-week" data-i18n="calendar.week">Week</button>
+                    <button class="btn btn-small cal-view-btn" id="cal-view-month" data-i18n="calendar.month">Month</button>
                 </div>
             </div>
             <div id="calendar-grid" class="calendar-month-grid"></div>
@@ -50,32 +50,32 @@
         <!-- ═══ SHOPPING VIEW ═══ -->
         <section id="view-shopping" class="view">
             <div class="view-header">
-                <h2>Shopping List</h2>
+                <h2 data-i18n="shopping.title">Shopping List</h2>
             </div>
 
             <!-- Week navigator -->
             <div class="shopping-week-nav">
-                <button class="btn btn-small" id="shopping-week-prev" title="Previous week">&#8249;</button>
+                <button class="btn btn-small" id="shopping-week-prev" data-i18n-title="shopping.previousWeek" title="Previous week">&#8249;</button>
                 <span id="shopping-date-range" class="shopping-date-range"></span>
-                <button class="btn btn-small" id="shopping-week-next" title="Next week">&#8250;</button>
+                <button class="btn btn-small" id="shopping-week-next" data-i18n-title="shopping.nextWeekNav" title="Next week">&#8250;</button>
             </div>
 
             <!-- Shopping list display -->
             <div id="shopping-list-container" class="hidden">
                 <div class="shopping-list-header">
-                    <h4>Shopping List</h4>
+                    <h4 data-i18n="shopping.title">Shopping List</h4>
                     <div class="shopping-list-header-right">
-                        <button class="btn btn-small btn-copy-list" id="btn-copy-shopping" title="Copy unchecked items to clipboard">
-                            📋 Copy
+                        <button class="btn btn-small btn-copy-list" id="btn-copy-shopping" data-i18n-title="shopping.copyTooltip" title="Copy unchecked items to clipboard">
+                            📋 <span data-i18n="shopping.copy">Copy</span>
                         </button>
-                        <button class="btn btn-small btn-clear-list" id="btn-clear-shopping" title="Clear all items">
-                            🗑️ Clear All
+                        <button class="btn btn-small btn-clear-list" id="btn-clear-shopping" data-i18n-title="shopping.clearTooltip" title="Clear all items">
+                            🗑️ <span data-i18n="shopping.clearAll">Clear All</span>
                         </button>
                     </div>
                 </div>
                 <div class="add-item-row card" style="padding:12px;margin-bottom:12px">
-                    <input type="text" id="add-shopping-item" class="input" placeholder="Add an item…">
-                    <button class="btn btn-primary btn-small" id="btn-add-shopping-item">+ Add</button>
+                    <input type="text" id="add-shopping-item" class="input" data-i18n-placeholder="shopping.addPlaceholder" placeholder="Add an item…">
+                    <button class="btn btn-primary btn-small" id="btn-add-shopping-item" data-i18n="shopping.addButton">+ Add</button>
                 </div>
                 <ul id="shopping-items" class="card" style="padding:12px"></ul>
             </div>
@@ -83,7 +83,7 @@
             <div id="shopping-empty" class="hidden">
                 <div class="empty-state card" style="padding:48px 20px">
                     <span class="emoji">🛒</span>
-                    <p>No ingredients this week.<br>Add some meals to your calendar first!</p>
+                    <p data-i18n="shopping.empty">No ingredients this week.<br>Add some meals to your calendar first!</p>
                 </div>
             </div>
         </section>
@@ -91,17 +91,17 @@
         <!-- ═══ RECIPES VIEW ═══ -->
         <section id="view-recipes" class="view">
             <div class="view-header">
-                <h2>My Recipes</h2>
+                <h2 data-i18n="recipes.title">My Recipes</h2>
                 <div class="view-header-actions">
-                    <button class="btn btn-icon view-toggle" id="btn-toggle-view" title="Switch view">
+                    <button class="btn btn-icon view-toggle" id="btn-toggle-view" data-i18n-title="recipes.switchView" title="Switch view">
                         <span class="toggle-grid">☷</span><span class="toggle-list hidden">▦</span>
                     </button>
                     <div class="add-recipe-dropdown" id="add-recipe-dropdown">
-                        <button class="btn btn-primary" id="btn-add-recipe-toggle">+ Add Recipe</button>
+                        <button class="btn btn-primary" id="btn-add-recipe-toggle" data-i18n="recipes.addRecipe">+ Add Recipe</button>
                         <div class="add-recipe-menu hidden" id="add-recipe-menu">
-                            <button class="add-recipe-option" id="btn-new-recipe">✏️ Manual Entry</button>
-                            <button class="add-recipe-option" id="btn-import-url">🔗 Import from URL</button>
-                            <button class="add-recipe-option" id="btn-import-file">📁 Import File</button>
+                            <button class="add-recipe-option" id="btn-new-recipe">✏️ <span data-i18n="recipes.manualEntry">Manual Entry</span></button>
+                            <button class="add-recipe-option" id="btn-import-url">🔗 <span data-i18n="recipes.importUrl">Import from URL</span></button>
+                            <button class="add-recipe-option" id="btn-import-file">📁 <span data-i18n="recipes.importFile">Import File</span></button>
                         </div>
                     </div>
                 </div>
@@ -112,22 +112,22 @@
             <div class="recipe-filter-bar">
                 <div class="search-tag-picker" id="search-tag-picker">
                     <div class="search-tag-chips" id="search-category-chips"></div>
-                    <input type="text" id="recipe-search" class="search-tag-input" placeholder="Search by name, ingredient, or category…" autocomplete="off">
+                    <input type="text" id="recipe-search" class="search-tag-input" data-i18n-placeholder="recipes.searchPlaceholder" placeholder="Search by name, ingredient, or category…" autocomplete="off">
                     <div class="search-tag-dropdown hidden" id="search-category-dropdown"></div>
                 </div>
                 <div class="time-slider-wrap">
-                    <label for="time-slider">⏱ Max time: <span id="time-slider-label">Any</span></label>
+                    <label for="time-slider">⏱ <span data-i18n="recipes.maxTime">Max time: </span><span id="time-slider-label" data-i18n="recipes.timeAny">Any</span></label>
                     <input type="range" id="time-slider" min="0" max="180" step="5" value="180">
                 </div>
                 <div class="sort-wrap">
-                    <label for="recipe-sort">Sort:</label>
+                    <label for="recipe-sort" data-i18n="recipes.sort">Sort:</label>
                     <select id="recipe-sort" class="input input-select">
-                        <option value="newest">Newest first</option>
-                        <option value="oldest">Oldest first</option>
-                        <option value="a-z">A → Z</option>
-                        <option value="z-a">Z → A</option>
-                        <option value="time-asc">Fastest first</option>
-                        <option value="time-desc">Slowest first</option>
+                        <option value="newest" data-i18n="recipes.sortNewest">Newest first</option>
+                        <option value="oldest" data-i18n="recipes.sortOldest">Oldest first</option>
+                        <option value="a-z" data-i18n="recipes.sortAZ">A → Z</option>
+                        <option value="z-a" data-i18n="recipes.sortZA">Z → A</option>
+                        <option value="time-asc" data-i18n="recipes.sortFastest">Fastest first</option>
+                        <option value="time-desc" data-i18n="recipes.sortSlowest">Slowest first</option>
                     </select>
                 </div>
             </div>
@@ -136,11 +136,11 @@
             <div id="import-section" class="card form-card hidden" style="max-width:600px">
                 <div class="url-input-group">
                     <input type="url" id="import-url" placeholder="https://www.example.com/recipe/..." class="input">
-                    <button class="btn btn-primary" id="btn-scrape">Import</button>
+                    <button class="btn btn-primary" id="btn-scrape" data-i18n="recipes.import">Import</button>
                 </div>
                 <div id="scrape-loading" class="hidden loading-indicator">
                     <div class="spinner"></div>
-                    <span>Fetching recipe…</span>
+                    <span data-i18n="recipes.fetching">Fetching recipe…</span>
                 </div>
                 <div id="scrape-error" class="hidden error-msg"></div>
             </div>
@@ -154,30 +154,30 @@
                         <p class="scraped-meta"><span id="scraped-time"></span> <span id="scraped-servings"></span></p>
                     </div>
                 </div>
-                <h4>Ingredients</h4>
+                <h4 data-i18n="recipes.ingredients">Ingredients</h4>
                 <ul id="scraped-ingredients" class="ingredient-list"></ul>
-                <h4>Method</h4>
+                <h4 data-i18n="recipes.method">Method</h4>
                 <ol id="scraped-instructions" class="instruction-list"></ol>
                 <div class="form-actions">
-                    <button class="btn btn-primary" id="btn-save-scraped">💾 Save to My Recipes</button>
+                    <button class="btn btn-primary" id="btn-save-scraped">💾 <span data-i18n="recipes.saveToMyRecipes">Save to My Recipes</span></button>
                 </div>
             </div>
 
             <!-- New recipe form (hidden) -->
             <div id="new-recipe-form" class="card form-card hidden">
-                <input type="text" id="recipe-title" placeholder="Recipe title" class="input">
+                <input type="text" id="recipe-title" data-i18n-placeholder="recipes.titlePlaceholder" placeholder="Recipe title" class="input">
                 <div class="tag-picker" id="category-tag-picker">
                     <div class="tag-picker-tags" id="category-tags"></div>
-                    <input type="text" id="recipe-categories-input" class="tag-picker-input" placeholder="Add a category…" autocomplete="off">
+                    <input type="text" id="recipe-categories-input" class="tag-picker-input" data-i18n-placeholder="recipes.categoryPlaceholder" placeholder="Add a category…" autocomplete="off">
                     <div class="tag-picker-dropdown hidden" id="category-dropdown"></div>
                 </div>
-                <input type="text" id="recipe-servings" placeholder="Servings (e.g. 4 servings)" class="input">
-                <input type="text" id="recipe-time" placeholder="Total time (e.g. 30 min)" class="input">
-                <textarea id="recipe-ingredients" placeholder="Ingredients (one per line)" class="input textarea" rows="6"></textarea>
-                <textarea id="recipe-instructions" placeholder="Instructions (one step per line)" class="input textarea" rows="6"></textarea>
+                <input type="text" id="recipe-servings" data-i18n-placeholder="recipes.servingsPlaceholder" placeholder="Servings (e.g. 4 servings)" class="input">
+                <input type="text" id="recipe-time" data-i18n-placeholder="recipes.timePlaceholder" placeholder="Total time (e.g. 30 min)" class="input">
+                <textarea id="recipe-ingredients" data-i18n-placeholder="recipes.ingredientsPlaceholder" placeholder="Ingredients (one per line)" class="input textarea" rows="6"></textarea>
+                <textarea id="recipe-instructions" data-i18n-placeholder="recipes.instructionsPlaceholder" placeholder="Instructions (one step per line)" class="input textarea" rows="6"></textarea>
                 <div class="form-actions">
-                    <button class="btn btn-primary" id="btn-save-recipe">Save Recipe</button>
-                    <button class="btn btn-ghost" id="btn-cancel-recipe">Cancel</button>
+                    <button class="btn btn-primary" id="btn-save-recipe" data-i18n="recipes.saveRecipe">Save Recipe</button>
+                    <button class="btn btn-ghost" id="btn-cancel-recipe" data-i18n="common.cancel">Cancel</button>
                 </div>
             </div>
 
@@ -187,9 +187,9 @@
             <div id="bulk-action-bar" class="bulk-action-bar hidden">
                 <span id="bulk-selected-count">0 selected</span>
                 <div class="bulk-action-buttons">
-                    <button class="btn btn-small" id="btn-select-all">Select All</button>
-                    <button class="btn btn-small btn-danger" id="btn-bulk-delete">Delete Selected</button>
-                    <button class="btn btn-small btn-ghost" id="btn-cancel-select">Cancel</button>
+                    <button class="btn btn-small" id="btn-select-all" data-i18n="bulk.selectAll">Select All</button>
+                    <button class="btn btn-small btn-danger" id="btn-bulk-delete" data-i18n="bulk.deleteSelected">Delete Selected</button>
+                    <button class="btn btn-small btn-ghost" id="btn-cancel-select" data-i18n="common.cancel">Cancel</button>
                 </div>
             </div>
         </section>
@@ -197,17 +197,17 @@
         <!-- ═══ AI CHAT VIEW ═══ -->
         <section id="view-chat" class="view">
             <div class="view-header">
-                <h2>AI Chef</h2>
+                <h2 data-i18n="chat.title">AI Chef</h2>
             </div>
             <div class="chat-container">
                 <div id="chat-messages" class="chat-messages">
                     <div class="chat-bubble assistant">
-                        <p>Hey! 👋 I'm your AI Chef. Ask me to suggest meals, plan your week, or get creative with ingredients you have on hand!</p>
+                        <p data-i18n="chat.welcome">Hey! 👋 I'm your AI Chef. Ask me to suggest meals, plan your week, or get creative with ingredients you have on hand!</p>
                     </div>
                 </div>
                 <div class="chat-input-area">
-                    <textarea id="chat-input" placeholder="e.g. Suggest 3 healthy dinners for this week…" class="input textarea" rows="2"></textarea>
-                    <button class="btn btn-primary" id="btn-send-chat">Send</button>
+                    <textarea id="chat-input" data-i18n-placeholder="chat.placeholder" placeholder="e.g. Suggest 3 healthy dinners for this week…" class="input textarea" rows="2"></textarea>
+                    <button class="btn btn-primary" id="btn-send-chat" data-i18n="chat.send">Send</button>
                 </div>
             </div>
         </section>
@@ -215,15 +215,22 @@
         <!-- ═══ SETTINGS VIEW ═══ -->
         <section id="view-settings" class="view">
             <div class="view-header">
-                <h2>Settings</h2>
+                <h2 data-i18n="settings.title">Settings</h2>
             </div>
             <div class="settings-card card">
                 <div class="settings-row">
-                    <label class="settings-label" for="setting-week-start">Week starts on</label>
+                    <label class="settings-label" for="setting-week-start" data-i18n="settings.weekStart">Week starts on</label>
                     <select id="setting-week-start" class="input input-select">
-                        <option value="1">Monday</option>
-                        <option value="0">Sunday</option>
-                        <option value="6">Saturday</option>
+                        <option value="1" data-i18n="settings.monday">Monday</option>
+                        <option value="0" data-i18n="settings.sunday">Sunday</option>
+                        <option value="6" data-i18n="settings.saturday">Saturday</option>
+                    </select>
+                </div>
+                <div class="settings-row">
+                    <label class="settings-label" for="setting-language" data-i18n="settings.language">Language</label>
+                    <select id="setting-language" class="input input-select">
+                        <option value="en" data-i18n="settings.langEnglish">English</option>
+                        <option value="fr" data-i18n="settings.langFrench">Français</option>
                     </select>
                 </div>
             </div>
@@ -246,17 +253,17 @@
             <h2 id="precook-title"></h2>
             <p class="precook-duration" id="precook-duration"></p>
             <div class="precook-time-section">
-                <label class="precook-label">🕐 What time should it be ready?</label>
+                <label class="precook-label">🕐 <span data-i18n="precook.readyTime">What time should it be ready?</span></label>
                 <input type="time" id="precook-time-input" class="precook-time-input">
                 <div class="precook-result hidden" id="precook-result">
                     <span class="precook-start-icon">⏰</span>
-                    <span>Start cooking at <strong id="precook-start-time"></strong></span>
+                    <span><span data-i18n="precook.startAt">Start cooking at </span><strong id="precook-start-time"></strong></span>
                 </div>
-                <p class="precook-no-time-hint" id="precook-no-time-hint">Optional — skip if you don't need a timer</p>
+                <p class="precook-no-time-hint" id="precook-no-time-hint" data-i18n="precook.skipHint">Optional — skip if you don't need a timer</p>
             </div>
             <div class="precook-actions">
-                <button class="btn btn-primary precook-go" id="precook-go">🍳 Let's Cook!</button>
-                <button class="btn btn-ghost" id="precook-cancel">Cancel</button>
+                <button class="btn btn-primary precook-go" id="precook-go">🍳 <span data-i18n="precook.letsGo">Let's Cook!</span></button>
+                <button class="btn btn-ghost" id="precook-cancel" data-i18n="common.cancel">Cancel</button>
             </div>
         </div>
     </div>
@@ -264,22 +271,22 @@
     <!-- ═══ COOKING MODE (full-screen overlay) ═══ -->
     <div id="cooking-mode" class="cooking-mode hidden">
         <div class="cooking-topbar">
-            <button class="btn cooking-exit" id="cooking-exit">✕ Exit</button>
+            <button class="btn cooking-exit" id="cooking-exit">✕ <span data-i18n="cooking.exit">Exit</span></button>
             <div class="cooking-title" id="cooking-title"></div>
             <div class="cooking-topbar-right">
                 <div class="cooking-start-time hidden" id="cooking-start-time" title="When you should have started">
                     <span class="cooking-start-time-icon">⏰</span>
                     <span id="cooking-start-time-text"></span>
                 </div>
-                <button class="btn cooking-toggle-ingredients" id="cooking-toggle-ingredients">📝 Ingredients</button>
-                <span class="cooking-wake-lock" id="cooking-wake-lock" title="Screen will stay on">🔒 Screen On</span>
+                <button class="btn cooking-toggle-ingredients" id="cooking-toggle-ingredients">📝 <span data-i18n="cooking.ingredients">Ingredients</span></button>
+                <span class="cooking-wake-lock" id="cooking-wake-lock" title="Screen will stay on">🔒 <span data-i18n="cooking.screenOn">Screen On</span></span>
             </div>
         </div>
 
         <div class="cooking-body">
             <!-- Ingredients slide-out panel -->
             <div class="cooking-ingredients-panel hidden" id="cooking-ingredients-panel">
-                <h3>Ingredients</h3>
+                <h3 data-i18n="cooking.ingredients">Ingredients</h3>
                 <ul id="cooking-ingredients-list"></ul>
             </div>
 
@@ -292,15 +299,16 @@
                 <div class="cooking-step-text" id="cooking-step-text"></div>
 
                 <div class="cooking-nav">
-                    <button class="btn btn-secondary cooking-nav-btn" id="cooking-prev">← Previous</button>
-                    <button class="btn btn-primary cooking-nav-btn cooking-nav-next" id="cooking-next">Next →</button>
+                    <button class="btn btn-secondary cooking-nav-btn" id="cooking-prev" data-i18n="cooking.previous">← Previous</button>
+                    <button class="btn btn-primary cooking-nav-btn cooking-nav-next" id="cooking-next" data-i18n="cooking.next">Next →</button>
                 </div>
 
-                <div class="cooking-hint">Use ← → arrow keys or swipe to navigate</div>
+                <div class="cooking-hint" data-i18n="cooking.hint">Use ← → arrow keys or swipe to navigate</div>
             </div>
         </div>
     </div>
 
+    <script src="{{ url_for('static', filename='js/i18n.js') }}"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>

@@ -654,12 +654,20 @@ def api_regenerate_recipe():
         '"total_time": "...", "servings": "...", "source_url": "https://...", "categories": ["..."]}}'
     )
 
+    system = "You are a creative chef. Always use METRIC measurements. Every recipe must come from a real, well-known recipe website with a valid source_url. Never invent recipes. Return only valid JSON, no markdown fences."
+    lang = models.get_setting("language", "en")
+    if lang == "fr":
+        system += (
+            " The user speaks French. Recipe title, ingredients, and instructions should be in French. "
+            "JSON keys must remain in English."
+        )
+
     try:
         response = client.models.generate_content(
             model="gemini-3-flash-preview",
             contents=[{"role": "user", "parts": [{"text": prompt}]}],
             config={
-                "system_instruction": "You are a creative chef. Always use METRIC measurements. Every recipe must come from a real, well-known recipe website with a valid source_url. Never invent recipes. Return only valid JSON, no markdown fences.",
+                "system_instruction": system,
                 "temperature": 0.9,
                 "max_output_tokens": 2000,
             },
@@ -864,12 +872,21 @@ def api_chat():
         contents.append({"role": role, "parts": [{"text": msg.get("content", "")}]})
     contents.append({"role": "user", "parts": [{"text": user_message}]})
 
+    system = SYSTEM_PROMPT
+    lang = models.get_setting("language", "en")
+    if lang == "fr":
+        system += (
+            "\n\nIMPORTANT: The user speaks French. Your 'message' field MUST be written in French. "
+            "Recipe titles, ingredients, and instructions should be in French. "
+            "JSON keys must remain in English."
+        )
+
     try:
         response = client.models.generate_content(
             model="gemini-3-flash-preview",
             contents=contents,
             config={
-                "system_instruction": SYSTEM_PROMPT,
+                "system_instruction": system,
                 "temperature": 0.8,
                 "max_output_tokens": 8000,
             },

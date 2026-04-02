@@ -77,6 +77,9 @@ async function loadSettings() {
         if (data.week_start_day !== undefined) {
             weekStartDay = parseInt(data.week_start_day);
         }
+        if (data.language) {
+            setLanguage(data.language);
+        }
     } catch (e) { /* use defaults */ }
 }
 
@@ -93,6 +96,22 @@ function initSettingsUI() {
         });
         calendarWeekStart = getWeekStart(new Date());
     });
+
+    const langSelect = $("#setting-language");
+    if (langSelect) {
+        langSelect.value = getLanguage();
+        langSelect.addEventListener("change", async () => {
+            setLanguage(langSelect.value);
+            await fetch(`${API}/api/settings`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ language: langSelect.value }),
+            });
+            translatePage();
+            const view = PATH_TO_VIEW[location.pathname] || "meal-plans";
+            navigateToView(view, false);
+        });
+    }
 }
 
 // Resolve initial view from URL on page load
@@ -100,6 +119,7 @@ function initSettingsUI() {
     // Load settings before first render so calendar uses correct week start
     await loadSettings();
     calendarWeekStart = getWeekStart(new Date());
+    translatePage();
     initSettingsUI();
 
     const view = PATH_TO_VIEW[location.pathname] || "meal-plans";
@@ -135,10 +155,10 @@ $("#time-slider").addEventListener("input", (() => {
     return (e) => {
         const val = parseInt(e.target.value);
         if (val >= 180) {
-            $("#time-slider-label").textContent = "Any";
+            $("#time-slider-label").textContent = t("recipes.timeAny");
             maxTimeFilter = null;
         } else if (val === 0) {
-            $("#time-slider-label").textContent = "No time set";
+            $("#time-slider-label").textContent = t("recipes.timeNone");
             maxTimeFilter = 0;
         } else {
             const h = Math.floor(val / 60);
@@ -183,8 +203,8 @@ function renderSearchCategoryChips() {
     });
     // Update placeholder based on selections
     searchInput.placeholder = selectedCategoryFilters.length > 0
-        ? "Search within selected categories…"
-        : "Search by name, ingredient, or category…";
+        ? t("recipes.searchCategories")
+        : t("recipes.searchPlaceholder");
 }
 
 function showSearchCategoryDropdown() {
@@ -298,12 +318,12 @@ async function loadRecipes() {
 
     if (filtered.length === 0) {
         const msg = recipes.length === 0
-            ? "No recipes yet. Add one manually or import from a URL!"
+            ? t("recipes.emptyNone")
             : currentSearchQuery
-                ? "No recipes match your search."
+                ? t("recipes.emptySearch")
                 : selectedCategoryFilters.length > 0
-                    ? "No recipes match those categories."
-                    : "No recipes yet.";
+                    ? t("recipes.emptyCategory")
+                    : t("recipes.emptyDefault");
         container.innerHTML = `<div class="empty-state"><span class="emoji">📖</span>${msg}</div>`;
         return;
     }
@@ -368,7 +388,7 @@ async function loadRecipes() {
 // ─── Bulk Actions ───
 function updateBulkActionBar() {
     const count = selectedRecipeIds.size;
-    $("#bulk-selected-count").textContent = `${count} selected`;
+    $("#bulk-selected-count").textContent = t("bulk.selected", { count });
     $("#btn-bulk-delete").disabled = count === 0;
     $("#bulk-action-bar").classList.toggle("hidden", count === 0);
 }
@@ -397,13 +417,13 @@ $("#btn-select-all").addEventListener("click", () => {
         });
     }
     updateBulkActionBar();
-    $("#btn-select-all").textContent = allSelected ? "Select All" : "Deselect All";
+    $("#btn-select-all").textContent = allSelected ? t("bulk.selectAll") : t("bulk.deselectAll");
 });
 
 $("#btn-bulk-delete").addEventListener("click", async () => {
     const count = selectedRecipeIds.size;
     if (count === 0) return;
-    if (!confirm(`Delete ${count} recipe${count > 1 ? "s" : ""}? This cannot be undone.`)) return;
+    if (!confirm(t("bulk.confirmDelete", { count }))) return;
     await fetch(`${API}/api/recipes/bulk-delete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -427,24 +447,24 @@ async function openRecipeModal(id, entryId, plannedServings) {
         ? r.ingredients.map((i) => scaleIngredient(i, ratio))
         : r.ingredients;
     const servingsLabel = displayServings
-        ? (ratio ? `· ${displayServings} servings (scaled)` : (r.servings ? "· " + r.servings : ""))
+        ? (ratio ? `· ${t("recipes.servingsScaled", { count: displayServings })}` : (r.servings ? "· " + r.servings : ""))
         : "";
 
     const actionBtn = entryId
-        ? `<button class="btn btn-danger btn-small" id="btn-remove-entry-modal" data-entry-id="${entryId}">Remove from Calendar</button>`
-        : `<button class="btn btn-primary btn-small" id="btn-add-to-calendar-modal">📅 Add to Calendar</button>
-           <button class="btn btn-secondary btn-small" id="btn-edit-recipe-modal">✏️ Edit</button>
-           <button class="btn btn-danger btn-small" onclick="deleteRecipe(${r.id})">Delete Recipe</button>`;
+        ? `<button class="btn btn-danger btn-small" id="btn-remove-entry-modal" data-entry-id="${entryId}">${t("recipes.removeFromCalendar")}</button>`
+        : `<button class="btn btn-primary btn-small" id="btn-add-to-calendar-modal">📅 ${t("calendar.addToCalendar")}</button>
+           <button class="btn btn-secondary btn-small" id="btn-edit-recipe-modal">✏️ ${t("recipes.edit")}</button>
+           <button class="btn btn-danger btn-small" onclick="deleteRecipe(${r.id})">${t("recipes.deleteRecipe")}</button>`;
 
     const hasMethods = r.instructions && r.instructions.length > 0;
     const cookBtn = hasMethods
-        ? `<button class="btn btn-start-cooking btn-small" id="btn-start-cooking">🍳 Start Cooking</button>`
+        ? `<button class="btn btn-start-cooking btn-small" id="btn-start-cooking">🍳 ${t("recipes.startCooking")}</button>`
         : '';
 
     body.innerHTML = `
         ${r.image_url ? `<img class="modal-recipe-image" src="${r.image_url}" alt="">` : ""}
         <h2 class="modal-recipe-title">${escHtml(r.title)}</h2>
-        <p class="modal-recipe-meta">${r.total_time || ""} ${servingsLabel} ${r.source_url ? `· <a href="${r.source_url}" target="_blank">Source ↗</a>` : ""}</p>
+        <p class="modal-recipe-meta">${r.total_time || ""} ${servingsLabel} ${r.source_url ? `· <a href="${r.source_url}" target="_blank">${t("recipes.source")}</a>` : ""}</p>
         <div class="modal-actions">
             ${cookBtn}
             ${actionBtn}
@@ -452,9 +472,9 @@ async function openRecipeModal(id, entryId, plannedServings) {
         ${(r.categories || []).length > 0
             ? `<div class="modal-recipe-cats">${r.categories.map((c) => `<span class="cat-pill">${escHtml(c)}</span>`).join("")}</div>`
             : ""}
-        <h4>Ingredients</h4>
+        <h4>${t("recipes.ingredients")}</h4>
         <ul class="ingredient-list">${ingredients.map((i) => `<li>${escHtml(i)}</li>`).join("")}</ul>
-        <h4>Method</h4>
+        <h4>${t("recipes.method")}</h4>
         <ol class="instruction-list">${r.instructions.map((s) => `<li>${escHtml(s)}</li>`).join("")}</ol>`;
 
     const removeBtn = body.querySelector("#btn-remove-entry-modal");
@@ -497,20 +517,20 @@ async function showEditRecipeForm(recipe) {
     let editCategories = [...(recipe.categories || [])];
 
     body.innerHTML = `
-        <h2 style="margin-top:0">Edit Recipe</h2>
-        <input type="text" id="edit-recipe-title" class="input" value="${escHtml(recipe.title)}" placeholder="Recipe title">
+        <h2 style="margin-top:0">${t("recipes.editRecipe")}</h2>
+        <input type="text" id="edit-recipe-title" class="input" value="${escHtml(recipe.title)}" placeholder="${t("recipes.placeholderTitle")}">
         <div class="tag-picker" id="edit-category-picker">
             <div class="tag-picker-tags" id="edit-category-tags"></div>
-            <input type="text" id="edit-category-input" class="tag-picker-input" placeholder="Add a category…" autocomplete="off">
+            <input type="text" id="edit-category-input" class="tag-picker-input" placeholder="${t("recipes.placeholderCategory")}" autocomplete="off">
             <div class="tag-picker-dropdown hidden" id="edit-category-dropdown"></div>
         </div>
-        <input type="text" id="edit-recipe-servings" class="input" value="${escHtml(recipe.servings || "")}" placeholder="Servings (e.g. 4 servings)">
-        <input type="text" id="edit-recipe-time" class="input" value="${escHtml(recipe.total_time || "")}" placeholder="Total time (e.g. 30 min)">
-        <textarea id="edit-recipe-ingredients" class="input textarea" rows="8" placeholder="Ingredients (one per line)">${escHtml(recipe.ingredients.join("\n"))}</textarea>
-        <textarea id="edit-recipe-instructions" class="input textarea" rows="8" placeholder="Instructions (one step per line)">${escHtml(recipe.instructions.join("\n"))}</textarea>
+        <input type="text" id="edit-recipe-servings" class="input" value="${escHtml(recipe.servings || "")}" placeholder="${t("recipes.placeholderServings")}">
+        <input type="text" id="edit-recipe-time" class="input" value="${escHtml(recipe.total_time || "")}" placeholder="${t("recipes.placeholderTime")}">
+        <textarea id="edit-recipe-ingredients" class="input textarea" rows="8" placeholder="${t("recipes.placeholderIngredients")}">${escHtml(recipe.ingredients.join("\n"))}</textarea>
+        <textarea id="edit-recipe-instructions" class="input textarea" rows="8" placeholder="${t("recipes.placeholderInstructions")}">${escHtml(recipe.instructions.join("\n"))}</textarea>
         <div class="form-actions" style="margin-top:12px">
-            <button class="btn btn-primary" id="btn-save-edit-recipe">Save Changes</button>
-            <button class="btn btn-ghost" id="btn-cancel-edit-recipe">Cancel</button>
+            <button class="btn btn-primary" id="btn-save-edit-recipe">${t("recipes.saveChanges")}</button>
+            <button class="btn btn-ghost" id="btn-cancel-edit-recipe">${t("common.cancel")}</button>
         </div>`;
 
     function renderEditTags() {
@@ -544,7 +564,7 @@ async function showEditRecipeForm(recipe) {
             `<div class="tag-dropdown-item" data-value="${escHtml(c)}">${escHtml(c)}</div>`
         ).join("");
         if (q && !allCategoriesList.some((c) => c.toLowerCase() === q)) {
-            items += `<div class="tag-dropdown-item tag-dropdown-new" data-value="${escHtml(editCatInput.value.trim())}">+ Create "${escHtml(editCatInput.value.trim())}"</div>`;
+            items += `<div class="tag-dropdown-item tag-dropdown-new" data-value="${escHtml(editCatInput.value.trim())}">${t("recipes.createCategory", { name: escHtml(editCatInput.value.trim()) })}</div>`;
         }
         if (!items) { editCatDropdown.classList.add("hidden"); return; }
         editCatDropdown.innerHTML = items;
@@ -603,13 +623,13 @@ async function showEditRecipeForm(recipe) {
         const totalTime = body.querySelector("#edit-recipe-time").value.trim() || null;
 
         if (!title || ingredients.length === 0) {
-            alert("Please provide a title and at least one ingredient.");
+            alert(t("recipes.validationError"));
             return;
         }
 
         const saveBtn = body.querySelector("#btn-save-edit-recipe");
         saveBtn.disabled = true;
-        saveBtn.textContent = "Saving…";
+        saveBtn.textContent = t("recipes.saving");
 
         await fetch(`${API}/api/recipes/${recipe.id}`, {
             method: "PUT",
@@ -635,7 +655,7 @@ $("#btn-close-modal").addEventListener("click", () => hide($("#recipe-modal")));
 $(".modal-overlay").addEventListener("click", () => hide($("#recipe-modal")));
 
 async function deleteRecipe(id) {
-    if (!confirm("Delete this recipe?")) return;
+    if (!confirm(t("recipes.confirmDelete"))) return;
     await fetch(`${API}/api/recipes/${id}`, { method: "DELETE" });
     hide($("#recipe-modal"));
     loadRecipes();
@@ -712,7 +732,7 @@ function showCategoryDropdown() {
         `<div class="tag-dropdown-item" data-value="${escHtml(c)}">${escHtml(c)}</div>`
     ).join("");
     if (q && !allCategoriesList.some((c) => c.toLowerCase() === q)) {
-        items += `<div class="tag-dropdown-item tag-dropdown-new" data-value="${escHtml(catInput.value.trim())}">+ Create "${escHtml(catInput.value.trim())}"</div>`;
+        items += `<div class="tag-dropdown-item tag-dropdown-new" data-value="${escHtml(catInput.value.trim())}">${t("recipes.createCategory", { name: escHtml(catInput.value.trim()) })}</div>`;
     }
     if (!items) { catDropdown.classList.add("hidden"); return; }
     catDropdown.innerHTML = items;
@@ -769,13 +789,13 @@ $("#paprika-file-input").addEventListener("change", async (e) => {
         const res = await fetch(endpoint, { method: "POST", body: formData });
         const data = await res.json();
         if (data.error) {
-            alert(`Import error: ${data.error}`);
+            alert(t("recipes.importError", { error: data.error }));
         } else {
-            alert(`Imported ${data.count} recipe${data.count !== 1 ? "s" : ""}! ✅`);
+            alert(t("recipes.importedSuccess", { count: data.count }));
             loadRecipes();
         }
     } catch (err) {
-        alert("Failed to import file.");
+        alert(t("recipes.importFailed"));
     }
     e.target.value = "";
 });
@@ -803,7 +823,7 @@ $("#btn-save-recipe").addEventListener("click", async () => {
     const categories = [...selectedCategories];
 
     if (!title || ingredients.length === 0) {
-        alert("Please provide a title and at least one ingredient.");
+        alert(t("recipes.validationError"));
         return;
     }
 
@@ -876,7 +896,7 @@ $("#btn-scrape").addEventListener("click", async () => {
         show($("#scrape-result"));
     } catch (err) {
         hide($("#scrape-loading"));
-        $("#scrape-error").textContent = "Failed to fetch recipe. Please check the URL.";
+        $("#scrape-error").textContent = t("recipes.fetchError");
         show($("#scrape-error"));
     }
 });
@@ -896,7 +916,7 @@ $("#btn-save-scraped").addEventListener("click", async () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(scrapedData),
     });
-    alert("Recipe saved! ✅");
+    alert(t("recipes.recipeSaved"));
     hide($("#scrape-result"));
     hide($("#import-section"));
     $("#import-url").value = "";
@@ -965,8 +985,8 @@ async function loadCalendarWeek() {
     const weekDates = getWeekGridDates(calendarWeekStart);
 
     // Update label
-    const startLabel = weekDates[0].toLocaleDateString(undefined, { day: "numeric", month: "short" });
-    const endLabel = weekDates[6].toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+    const startLabel = weekDates[0].toLocaleDateString(getLocale(), { day: "numeric", month: "short" });
+    const endLabel = weekDates[6].toLocaleDateString(getLocale(), { day: "numeric", month: "short", year: "numeric" });
     $("#cal-month-label").textContent = `${startLabel} – ${endLabel}`;
 
     // Fetch entries — may span two months
@@ -996,9 +1016,9 @@ async function loadCalendarWeek() {
         const iso = isoDate(dateObj);
         const isToday = iso === todayISO;
         const dayEntries = entryMap[iso] || [];
-        const dayName = dateObj.toLocaleDateString(undefined, { weekday: "short" });
+        const dayName = dateObj.toLocaleDateString(getLocale(), { weekday: "short" });
         const dayNum = dateObj.getDate();
-        const monthName = dateObj.toLocaleDateString(undefined, { month: "short" });
+        const monthName = dateObj.toLocaleDateString(getLocale(), { month: "short" });
 
         html += `<div class="cal-week-row${isToday ? " cal-week-row-today" : ""}" data-date="${iso}">`;
         html += `<div class="cal-week-day-label">`;
@@ -1011,7 +1031,7 @@ async function loadCalendarWeek() {
         MEALS.forEach((meal) => {
             const mealEntries = dayEntries.filter((e) => e.meal_type === meal);
             html += `<div class="cal-meal-slot" data-day="${iso}" data-meal="${meal}">`;
-            html += `<span class="cal-meal-label">${meal}</span>`;
+            html += `<span class="cal-meal-label">${tMeal(meal)}</span>`;
             mealEntries.forEach((e) => {
                 if (e.note) {
                     html += `<div class="cal-entry cal-entry-note" draggable="true"
@@ -1024,7 +1044,7 @@ async function loadCalendarWeek() {
                                   data-entry-id="${e.id}" data-entry-type="recipe"
                                   data-recipe-id="${e.recipe_id}" data-servings="${e.servings}">
                         <a href="#" class="cal-entry-link" data-recipe-id="${e.recipe_id}" data-entry-id="${e.id}" data-servings="${e.servings}">${escHtml(e.recipe_title)}</a>
-                        <span class="cal-entry-srv">${e.servings}srv</span>
+                        <span class="cal-entry-srv">${t("calendar.srvBadge", { n: e.servings })}</span>
                     </div>`;
                 }
             });
@@ -1047,7 +1067,7 @@ async function loadCalendarMonth() {
     const apiMonth = month + 1; // 1-indexed for API
 
     // Update month label
-    const monthName = calendarMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+    const monthName = calendarMonth.toLocaleDateString(getLocale(), { month: "long", year: "numeric" });
     $("#cal-month-label").textContent = monthName;
 
     // We need entries that may span the visible grid (includes prev/next month days)
@@ -1091,7 +1111,7 @@ async function loadCalendarMonth() {
     grid.className = "calendar-month-grid";
 
     let html = `<div class="cal-weekday-header">`;
-    const dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    const dayNames = ["day.sun","day.mon","day.tue","day.wed","day.thu","day.fri","day.sat"].map(k => t(k));
     for (let i = 0; i < 7; i++) {
         html += `<div class="cal-wh">${dayNames[(weekStartDay + i) % 7]}</div>`;
     }
@@ -1109,7 +1129,7 @@ async function loadCalendarMonth() {
         MEALS.forEach((meal) => {
             const mealEntries = dayEntries.filter((e) => e.meal_type === meal);
             html += `<div class="cal-meal-slot" data-day="${iso}" data-meal="${meal}">`;
-            html += `<span class="cal-meal-label">${meal}</span>`;
+            html += `<span class="cal-meal-label">${tMeal(meal)}</span>`;
             mealEntries.forEach((e) => {
                 if (e.note) {
                     html += `<div class="cal-entry cal-entry-note" draggable="true"
@@ -1122,7 +1142,7 @@ async function loadCalendarMonth() {
                                   data-entry-id="${e.id}" data-entry-type="recipe"
                                   data-recipe-id="${e.recipe_id}" data-servings="${e.servings}">
                         <a href="#" class="cal-entry-link" data-recipe-id="${e.recipe_id}" data-entry-id="${e.id}" data-servings="${e.servings}">${escHtml(e.recipe_title)}</a>
-                        <span class="cal-entry-srv">${e.servings}srv</span>
+                        <span class="cal-entry-srv">${t("calendar.srvBadge", { n: e.servings })}</span>
                     </div>`;
                 }
             });
@@ -1158,7 +1178,7 @@ function openEntryContextMenu(entry) {
     if (isRecipe) {
         servingsHtml = `
             <div class="ctx-servings">
-                <span class="ctx-label">Servings</span>
+                <span class="ctx-label">${t("ctx.servings")}</span>
                 <div class="ctx-srv-picker">
                     <button class="btn btn-secondary ctx-srv-dec">&minus;</button>
                     <span class="ctx-srv-val">${currentServings}</span>
@@ -1170,19 +1190,19 @@ function openEntryContextMenu(entry) {
 
     let editNoteHtml = "";
     if (isNote) {
-        editNoteHtml = `<button class="ctx-action ctx-edit-note">✏️ Edit</button>`;
+        editNoteHtml = `<button class="ctx-action ctx-edit-note">✏️ ${t("ctx.edit")}</button>`;
     }
 
     let copyHtml = "";
     if (isRecipe) {
-        copyHtml = `<button class="ctx-action ctx-copy">📋 Copy to…</button>`;
+        copyHtml = `<button class="ctx-action ctx-copy">📋 ${t("ctx.copyTo")}</button>`;
     }
 
     menu.innerHTML = `
         ${servingsHtml}
         ${editNoteHtml}
         ${copyHtml}
-        <button class="ctx-action ctx-remove">🗑 Remove</button>`;
+        <button class="ctx-action ctx-remove">🗑 ${t("ctx.remove")}</button>`;
 
     entry.appendChild(menu);
 
@@ -1269,11 +1289,11 @@ function openEditNoteModal(entryId, currentNote) {
         <div class="modal-overlay"></div>
         <div class="modal-content card" style="max-width:420px">
             <button class="modal-close edit-note-close">&times;</button>
-            <h3 style="margin-bottom:12px">Edit Note</h3>
+            <h3 style="margin-bottom:12px">${t("editNote.title")}</h3>
             <textarea class="input edit-note-input" rows="3">${escHtml(currentNote)}</textarea>
             <div class="form-actions" style="margin-top:12px">
-                <button class="btn btn-primary edit-note-save">Save</button>
-                <button class="btn btn-ghost edit-note-cancel">Cancel</button>
+                <button class="btn btn-primary edit-note-save">${t("editNote.save")}</button>
+                <button class="btn btn-ghost edit-note-cancel">${t("common.cancel")}</button>
             </div>
         </div>`;
     document.body.appendChild(overlay);
@@ -1289,7 +1309,7 @@ function openEditNoteModal(entryId, currentNote) {
 
     overlay.querySelector(".edit-note-save").addEventListener("click", async () => {
         const note = input.value.trim();
-        if (!note) { alert("Please enter a note."); return; }
+        if (!note) { alert(t("calendar.pleaseEnterNote")); return; }
         await fetch(`${API}/api/calendar/entries/${entryId}/note`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
@@ -1478,11 +1498,11 @@ function openAssignToCalendarModal(recipeId, title, defaultServings) {
         const weekDates = getWeekGridDates(weekStart);
         const uniqueDates = weekDates.map(d => isoDate(d));
         const weekEnd = weekDates[6];
-        const weekLabel = weekDates[0].toLocaleDateString(undefined, { day: "numeric", month: "short" })
-            + " – " + weekEnd.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+        const weekLabel = weekDates[0].toLocaleDateString(getLocale(), { day: "numeric", month: "short" })
+            + " – " + weekEnd.toLocaleDateString(getLocale(), { day: "numeric", month: "short", year: "numeric" });
 
         modal.querySelector(".modal-inner").innerHTML = `
-            <h3>Add to Calendar</h3>
+            <h3>${t("calendar.addToCalendar")}</h3>
             <p class="copy-hint">${escHtml(title)}</p>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
                 <button class="btn btn-small assign-prev">&#8249;</button>
@@ -1492,19 +1512,19 @@ function openAssignToCalendarModal(recipeId, title, defaultServings) {
             <div class="copy-grid">
                 ${uniqueDates.map((date) => {
                     const d = new Date(date + "T00:00:00");
-                    const label = d.toLocaleDateString(undefined, { weekday: "short", day: "numeric" });
+                    const label = d.toLocaleDateString(getLocale(), { weekday: "short", day: "numeric" });
                     return `
                     <div class="copy-day">
                         <strong>${label}</strong>
                         ${MEALS.map((meal) => `
                             <button class="btn btn-secondary copy-target" data-day="${date}" data-meal="${meal}">
-                                ${meal}
+                                ${tMeal(meal)}
                             </button>`).join("")}
                     </div>`;
                 }).join("")}
             </div>
             <div class="form-actions" style="margin-top:16px">
-                <button class="btn btn-ghost cancel-add">Cancel</button>
+                <button class="btn btn-ghost cancel-add">${t("common.cancel")}</button>
             </div>`;
 
         modal.querySelector(".assign-prev").addEventListener("click", () => {
@@ -1523,20 +1543,20 @@ function openAssignToCalendarModal(recipeId, title, defaultServings) {
             btn.addEventListener("click", () => {
                 const day = btn.dataset.day;
                 const meal = btn.dataset.meal;
-                const dayLabel = new Date(day + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" });
+                const dayLabel = new Date(day + "T00:00:00").toLocaleDateString(getLocale(), { weekday: "long", day: "numeric", month: "short" });
 
                 modal.querySelector(".modal-inner").innerHTML = `
                     <h3>${escHtml(title)}</h3>
-                    <p class="copy-hint">${dayLabel} · ${meal}</p>
-                    <p class="servings-prompt">How many servings?</p>
+                    <p class="copy-hint">${dayLabel} · ${tMeal(meal)}</p>
+                    <p class="servings-prompt">${t("calendar.howManyServings")}</p>
                     <div class="servings-picker">
                         <button class="btn btn-secondary servings-dec">&minus;</button>
                         <span class="servings-value">${defaultServings}</span>
                         <button class="btn btn-secondary servings-inc">+</button>
                     </div>
                     <div class="form-actions" style="margin-top:16px">
-                        <button class="btn btn-primary confirm-assign">Add to Calendar</button>
-                        <button class="btn btn-ghost cancel-add">Cancel</button>
+                        <button class="btn btn-primary confirm-assign">${t("calendar.addToCalendar")}</button>
+                        <button class="btn btn-ghost cancel-add">${t("common.cancel")}</button>
                     </div>`;
 
                 const valEl = modal.querySelector(".servings-value");
@@ -1550,7 +1570,7 @@ function openAssignToCalendarModal(recipeId, title, defaultServings) {
                 modal.querySelector(".cancel-add").addEventListener("click", () => modal.remove());
                 modal.querySelector(".confirm-assign").addEventListener("click", async () => {
                     modal.querySelector(".confirm-assign").disabled = true;
-                    modal.querySelector(".confirm-assign").textContent = "Adding…";
+                    modal.querySelector(".confirm-assign").textContent = t("calendar.adding");
                     await fetch(`${API}/api/calendar/entries`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
@@ -1585,25 +1605,25 @@ function openCopyModal(entryId) {
     modal.className = "add-meal-modal";
     modal.innerHTML = `
         <div class="modal-inner">
-            <h3>Copy to…</h3>
-            <p class="copy-hint">Select one or more slots, then press Copy.</p>
+            <h3>${t("copy.title")}</h3>
+            <p class="copy-hint">${t("copy.hint")}</p>
             <div class="copy-grid">
                 ${uniqueDates.map((date) => {
                     const d = new Date(date + "T00:00:00");
-                    const label = d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+                    const label = d.toLocaleDateString(getLocale(), { weekday: "short", day: "numeric", month: "short" });
                     return `
                     <div class="copy-day">
                         <strong>${label}</strong>
                         ${MEALS.map((meal) => `
                             <button class="btn btn-secondary copy-target" data-day="${date}" data-meal="${meal}">
-                                ${meal}
+                                ${tMeal(meal)}
                             </button>`).join("")}
                     </div>`;
                 }).join("")}
             </div>
             <div class="form-actions" style="margin-top:16px">
-                <button class="btn btn-primary copy-confirm" disabled>Copy</button>
-                <button class="btn btn-ghost cancel-add">Cancel</button>
+                <button class="btn btn-primary copy-confirm" disabled>${t("copy.button")}</button>
+                <button class="btn btn-ghost cancel-add">${t("common.cancel")}</button>
             </div>
         </div>`;
 
@@ -1625,7 +1645,7 @@ function openCopyModal(entryId) {
         const selected = modal.querySelectorAll(".copy-target.copy-selected");
         if (selected.length === 0) return;
         confirmBtn.disabled = true;
-        confirmBtn.textContent = "Copying…";
+        confirmBtn.textContent = t("copy.copying");
         await Promise.all(
             Array.from(selected).map((btn) =>
                 fetch(`${API}/api/calendar/entries/${entryId}/copy`, {
@@ -1643,19 +1663,19 @@ function openCopyModal(entryId) {
 async function openAddMealModal(day, meal) {
     const res = await fetch(`${API}/api/recipes`);
     const recipes = await res.json();
-    const dayLabel = new Date(day + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" });
+    const dayLabel = new Date(day + "T00:00:00").toLocaleDateString(getLocale(), { weekday: "long", day: "numeric", month: "short" });
 
     const modal = document.createElement("div");
     modal.className = "add-meal-modal";
     modal.innerHTML = `
         <div class="modal-inner">
-            <h3>Add ${meal} for ${dayLabel}</h3>
+            <h3>${t("calendar.addMealFor", { meal: tMeal(meal), day: dayLabel })}</h3>
             <div class="meal-choice-btns">
-                <button class="btn btn-primary choice-recipe">📖 Pick a Recipe</button>
-                <button class="btn btn-secondary choice-note">📝 Add a Note</button>
+                <button class="btn btn-primary choice-recipe">📖 ${t("calendar.pickRecipe")}</button>
+                <button class="btn btn-secondary choice-note">📝 ${t("calendar.addNote")}</button>
             </div>
             <div class="form-actions" style="margin-top:16px">
-                <button class="btn btn-ghost cancel-add">Cancel</button>
+                <button class="btn btn-ghost cancel-add">${t("common.cancel")}</button>
             </div>
         </div>`;
 
@@ -1666,17 +1686,17 @@ async function openAddMealModal(day, meal) {
     // ── Pick a recipe flow ──
     modal.querySelector(".choice-recipe").addEventListener("click", () => {
         if (recipes.length === 0) {
-            alert("No recipes available. Add some recipes first!");
+            alert(t("calendar.noRecipes"));
             return;
         }
         modal.querySelector(".modal-inner").innerHTML = `
-            <h3>Add ${meal} for ${dayLabel}</h3>
-            <input type="text" class="input recipe-search" placeholder="Search recipes…" autofocus>
+            <h3>${t("calendar.addMealFor", { meal: tMeal(meal), day: dayLabel })}</h3>
+            <input type="text" class="input recipe-search" placeholder="${t("calendar.searchRecipes")}" autofocus>
             <div class="recipe-pick-list">
                 ${recipes.map((r) => `<div class="recipe-pick" data-recipe-id="${r.id}">${escHtml(r.title)}</div>`).join("")}
             </div>
             <div class="form-actions" style="margin-top:16px">
-                <button class="btn btn-ghost cancel-add">Cancel</button>
+                <button class="btn btn-ghost cancel-add">${t("common.cancel")}</button>
             </div>`;
 
         const searchInput = modal.querySelector(".recipe-search");
@@ -1697,15 +1717,15 @@ async function openAddMealModal(day, meal) {
 
                 modal.querySelector(".modal-inner").innerHTML = `
                     <h3>${escHtml(recipe.title)}</h3>
-                    <p class="servings-prompt">How many servings?</p>
+                    <p class="servings-prompt">${t("calendar.howManyServings")}</p>
                     <div class="servings-picker">
                         <button class="btn btn-secondary servings-dec">&minus;</button>
                         <span class="servings-value">${defaultServings}</span>
                         <button class="btn btn-secondary servings-inc">+</button>
                     </div>
                     <div class="form-actions" style="margin-top:16px">
-                        <button class="btn btn-primary confirm-add">Add to calendar</button>
-                        <button class="btn btn-ghost cancel-add">Cancel</button>
+                        <button class="btn btn-primary confirm-add">${t("calendar.addToCalendarShort")}</button>
+                        <button class="btn btn-ghost cancel-add">${t("common.cancel")}</button>
                     </div>`;
 
                 const valEl = modal.querySelector(".servings-value");
@@ -1738,17 +1758,17 @@ async function openAddMealModal(day, meal) {
     // ── Add a note flow ──
     modal.querySelector(".choice-note").addEventListener("click", () => {
         modal.querySelector(".modal-inner").innerHTML = `
-            <h3>Add note for ${dayLabel} ${meal}</h3>
-            <textarea class="input note-input" rows="3" placeholder="e.g. Leftovers, Eat out, Salad…" autofocus></textarea>
+            <h3>${t("calendar.addNoteFor", { day: dayLabel, meal: tMeal(meal) })}</h3>
+            <textarea class="input note-input" rows="3" placeholder="${t("calendar.notePlaceholder")}" autofocus></textarea>
             <div class="form-actions" style="margin-top:16px">
-                <button class="btn btn-primary confirm-note">Add to calendar</button>
-                <button class="btn btn-ghost cancel-add">Cancel</button>
+                <button class="btn btn-primary confirm-note">${t("calendar.addToCalendarShort")}</button>
+                <button class="btn btn-ghost cancel-add">${t("common.cancel")}</button>
             </div>`;
 
         modal.querySelector(".cancel-add").addEventListener("click", () => modal.remove());
         modal.querySelector(".confirm-note").addEventListener("click", async () => {
             const note = modal.querySelector(".note-input").value.trim();
-            if (!note) { alert("Please enter a note."); return; }
+            if (!note) { alert(t("calendar.pleaseEnterNote")); return; }
             await fetch(`${API}/api/calendar/entries`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -1808,8 +1828,8 @@ function getWeekRange(offset) {
 function formatWeekLabel(start, end) {
     const s = new Date(start + "T00:00:00");
     const e = new Date(end + "T00:00:00");
-    const sLabel = s.toLocaleDateString(undefined, { day: "numeric", month: "short" });
-    const eLabel = e.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+    const sLabel = s.toLocaleDateString(getLocale(), { day: "numeric", month: "short" });
+    const eLabel = e.toLocaleDateString(getLocale(), { day: "numeric", month: "short" });
     return `${sLabel} – ${eLabel}`;
 }
 
@@ -1830,7 +1850,7 @@ function renderShoppingList(items) {
     let html = "";
     for (const cat of CATEGORY_ORDER) {
         if (!grouped[cat] || grouped[cat].length === 0) continue;
-        html += `<li class="shopping-category-header" data-category="${escHtml(cat)}"><span class="shopping-category-left"><span class="shopping-category-chevron">&#9662;</span><span class="shopping-category-name">${escHtml(cat)}</span></span><span class="shopping-category-count">${grouped[cat].length}</span></li>`;
+        html += `<li class="shopping-category-header" data-category="${escHtml(cat)}"><span class="shopping-category-left"><span class="shopping-category-chevron">&#9662;</span><span class="shopping-category-name">${escHtml(tCategory(cat))}</span></span><span class="shopping-category-count">${grouped[cat].length}</span></li>`;
         html += grouped[cat].map((item) => {
             const text = item.text;
             const recipes = item.recipes || [];
@@ -1860,7 +1880,7 @@ function renderShoppingList(items) {
 
 async function loadShoppingView() {
     const { start, end } = getWeekRange(shoppingWeekOffset);
-    const label = shoppingWeekOffset === 0 ? "This week" : shoppingWeekOffset === 1 ? "Next week" : null;
+    const label = shoppingWeekOffset === 0 ? t("shopping.thisWeek") : shoppingWeekOffset === 1 ? t("shopping.nextWeek") : null;
     const rangeText = formatWeekLabel(start, end);
     $("#shopping-date-range").textContent = label ? `${label}: ${rangeText}` : rangeText;
 
@@ -1947,14 +1967,14 @@ $("#btn-copy-shopping").addEventListener("click", async () => {
 
     const itemCount = lines.filter(l => l && !l.startsWith("---")).length;
     if (itemCount === 0) {
-        $("#btn-copy-shopping").textContent = "✅ All done!";
-        setTimeout(() => $("#btn-copy-shopping").textContent = "📋 Copy", 2000);
+        $("#btn-copy-shopping").textContent = "✅ " + t("shopping.allDone");
+        setTimeout(() => $("#btn-copy-shopping").textContent = "📋 " + t("shopping.copy"), 2000);
         return;
     }
     const text = lines.join("\n");
     try {
         await navigator.clipboard.writeText(text);
-        $("#btn-copy-shopping").textContent = `✅ ${itemCount} items copied!`;
+        $("#btn-copy-shopping").textContent = "✅ " + t("shopping.itemsCopied", { count: itemCount });
     } catch {
         const ta = document.createElement("textarea");
         ta.value = text;
@@ -1962,9 +1982,9 @@ $("#btn-copy-shopping").addEventListener("click", async () => {
         ta.select();
         document.execCommand("copy");
         document.body.removeChild(ta);
-        $("#btn-copy-shopping").textContent = `✅ ${itemCount} items copied!`;
+        $("#btn-copy-shopping").textContent = "✅ " + t("shopping.itemsCopied", { count: itemCount });
     }
-    setTimeout(() => $("#btn-copy-shopping").textContent = "📋 Copy", 2500);
+    setTimeout(() => $("#btn-copy-shopping").textContent = "📋 " + t("shopping.copy"), 2500);
 });
 
 // Clear all shopping list items
@@ -2026,15 +2046,15 @@ async function sendChat() {
         if (data.meal_plan && data.meal_plan.entries && data.meal_plan.entries.length > 0) {
             const mp = data.meal_plan;
             html += `<div class="chat-meal-plan">`;
-            html += `<h4>📅 Proposed Meal Plan</h4>`;
+            html += `<h4>📅 ${t("chat.proposedMealPlan")}</h4>`;
             html += `<div class="chat-plan-grid">`;
             const planDays = [...new Set(mp.entries.map(e => e.day))].sort();
             planDays.forEach((day) => {
                 const dayEntries = mp.entries.filter((e) => e.day === day);
                 if (dayEntries.length === 0) return;
                 const d = new Date(day + "T00:00:00");
-                const dayName = d.toLocaleDateString(undefined, { weekday: "short" });
-                const dateNum = d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+                const dayName = d.toLocaleDateString(getLocale(), { weekday: "short" });
+                const dateNum = d.toLocaleDateString(getLocale(), { day: "numeric", month: "short" });
                 html += `<div class="chat-plan-day">`;
                 html += `<div class="chat-day-heading"><span class="chat-day-name">${dayName}</span><span class="chat-day-date">${dateNum}</span></div>`;
                 dayEntries.forEach((e) => {
@@ -2044,7 +2064,7 @@ async function sendChat() {
                     html += `<div class="chat-plan-entry" draggable="true" data-mp-entry-idx="${globalIdx}"
                                   data-recipe-json="${escHtml(JSON.stringify(r))}"
                                   data-day="${e.day}" data-meal="${e.meal}">`;
-                    html += `<span class="cpe-meal cpe-meal--${e.meal}">${e.meal}</span>`;
+                    html += `<span class="cpe-meal cpe-meal--${e.meal}">${tMeal(e.meal)}</span>`;
                     html += `<a href="#" class="cpe-title" data-entry-idx="${globalIdx}">${escHtml(r.title || "?")}</a>`;
                     html += timeStr;
                     html += `<button class="cpe-regen" title="Regenerate" data-entry-idx="${globalIdx}">↻</button>`;
@@ -2054,7 +2074,7 @@ async function sendChat() {
             });
             html += `</div>`;
             html += `<div class="chat-plan-actions">`;
-            html += `<button class="btn btn-primary create-chat-plan">📅 Add to Calendar</button>`;
+            html += `<button class="btn btn-primary create-chat-plan">📅 ${t("chat.addToCalendar")}</button>`;
             html += `</div>`;
             html += `</div>`;
         }
@@ -2067,14 +2087,14 @@ async function sendChat() {
                             <div class="recipe-img-shimmer"></div>
                         </div>
                         <h4>${escHtml(r.title)}</h4>
-                        <p class="meta">${r.total_time || ""} ${r.servings ? "· " + r.servings : ""}${r.source_url ? ` · <a href="${r.source_url}" target="_blank">Source ↗</a>` : ""}</p>
-                        <details><summary>Ingredients</summary>
+                        <p class="meta">${r.total_time || ""} ${r.servings ? "· " + r.servings : ""}${r.source_url ? ` · <a href="${r.source_url}" target="_blank">${t("recipes.source")}</a>` : ""}</p>
+                        <details><summary>${t("recipes.ingredients")}</summary>
                             <ul>${(r.ingredients || []).map((i) => `<li>${escHtml(i)}</li>`).join("")}</ul>
                         </details>
-                        <details><summary>Instructions</summary>
+                        <details><summary>${t("recipes.method")}</summary>
                             <ol>${(r.instructions || []).map((s) => `<li>${escHtml(s)}</li>`).join("")}</ol>
                         </details>
-                        <button class="btn btn-primary btn-small save-chat-recipe" data-chat-idx="${idx}">💾 Save Recipe</button>
+                        <button class="btn btn-primary btn-small save-chat-recipe" data-chat-idx="${idx}">💾 ${t("chat.saveRecipe")}</button>
                     </div>`;
             });
         }
@@ -2091,7 +2111,7 @@ async function sendChat() {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(recipe),
                 });
-                btn.textContent = "✅ Saved!";
+                btn.textContent = "✅ " + t("chat.saved");
                 btn.disabled = true;
             });
         });
@@ -2229,7 +2249,7 @@ async function sendChat() {
 
             createBtn.addEventListener("click", async () => {
                 createBtn.disabled = true;
-                createBtn.textContent = "Adding…";
+                createBtn.textContent = t("calendar.adding");
                 try {
                     const payload = { ...data.meal_plan };
                     const res2 = await fetch(`${API}/api/generate-meal-plan`, {
@@ -2241,7 +2261,7 @@ async function sendChat() {
                     if (result.error) {
                         createBtn.textContent = `⚠️ ${result.error}`;
                     } else {
-                        createBtn.textContent = `✅ ${result.entries_created} meals added!`;
+                        createBtn.textContent = t("chat.mealsAdded", { count: result.entries_created });
                         bubble.querySelectorAll(".chat-plan-entry").forEach((el) => {
                             if (!el.querySelector(".chat-saved-badge")) {
                                 const badge = document.createElement("span");
@@ -2250,16 +2270,16 @@ async function sendChat() {
                                 el.appendChild(badge);
                             }
                         });
-                        appendBubble("assistant", `<p>Your meals have been added to the calendar and all recipes saved to your collection! Head to <strong>Calendar</strong> to see them. 🎉</p>`);
+                        appendBubble("assistant", `<p>${t("chat.planAdded")}</p>`);
                     }
                 } catch (err) {
-                    createBtn.textContent = "⚠️ Failed";
+                    createBtn.textContent = "⚠️ " + t("chat.failed");
                 }
             });
         }
     } catch (err) {
         typing.remove();
-        appendBubble("assistant", `<p>⚠️ Something went wrong. Please try again.</p>`);
+        appendBubble("assistant", `<p>⚠️ ${t("chat.error")}</p>`);
     }
 }
 
@@ -2285,13 +2305,13 @@ function openChatRecipeModal(recipe) {
             <button class="chat-recipe-modal-close">&times;</button>
             ${imgHtml}
             <h3>${escHtml(r.title)}</h3>
-            <p class="meta">${r.total_time || ""}${r.servings ? " · " + r.servings : ""}${r.source_url ? ` · <a href="${r.source_url}" target="_blank">Source ↗</a>` : ""}</p>
+            <p class="meta">${r.total_time || ""}${r.servings ? " · " + r.servings : ""}${r.source_url ? ` · <a href="${r.source_url}" target="_blank">${t("recipes.source")}</a>` : ""}</p>
             ${r.categories && r.categories.length ? `<div style="margin-bottom:12px">${r.categories.map(c => `<span class="category-pill" style="font-size:11px;padding:2px 8px;margin-right:4px">${escHtml(c)}</span>`).join("")}</div>` : ""}
-            <h4>Ingredients</h4>
+            <h4>${t("recipes.ingredients")}</h4>
             <ul>${(r.ingredients || []).map(i => `<li>${escHtml(i)}</li>`).join("")}</ul>
-            <h4>Method</h4>
+            <h4>${t("recipes.method")}</h4>
             <ol>${(r.instructions || []).map(s => `<li>${escHtml(s)}</li>`).join("")}</ol>
-            ${hasMethods ? `<div style="margin-top:16px"><button class="btn btn-start-cooking btn-small chat-start-cooking">🍳 Start Cooking</button></div>` : ""}
+            ${hasMethods ? `<div style="margin-top:16px"><button class="btn btn-start-cooking btn-small chat-start-cooking">🍳 ${t("recipes.startCooking")}</button></div>` : ""}
         </div>`;
     document.body.appendChild(overlay);
     overlay.querySelector(".chat-recipe-modal-close").addEventListener("click", () => overlay.remove());
@@ -2348,7 +2368,7 @@ function parseTotalTimeMinutes(timeStr) {
 }
 
 function formatTimeHHMM(date) {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString(getLocale(), { hour: '2-digit', minute: '2-digit' });
 }
 
 // ── Pre-cook screen ──
@@ -2365,10 +2385,10 @@ function showPrecookScreen(recipe) {
         const h = Math.floor(mins / 60);
         const m = mins % 60;
         const durStr = h > 0 ? `${h}h ${m > 0 ? m + 'min' : ''}` : `${m} min`;
-        $("#precook-duration").textContent = `⏱ Total time: ${durStr}`;
+        $("#precook-duration").textContent = "⏱ " + t("precook.totalTime", { duration: durStr });
         $("#precook-duration").style.display = "";
     } else {
-        $("#precook-duration").textContent = "⏱ No cook time specified";
+        $("#precook-duration").textContent = "⏱ " + t("precook.noTime");
         $("#precook-duration").style.display = "";
     }
 
@@ -2392,7 +2412,7 @@ function updatePrecookResult() {
 
     if (!timeVal || !mins) {
         hide(resultEl);
-        hintEl.textContent = mins ? "Pick a time above, or skip" : "No cook time on this recipe — you can still set a target";
+        hintEl.textContent = mins ? t("precook.pickTimeHint") : t("precook.noTimeHint");
         show(hintEl);
         cookingStartTimeStr = null;
         return;
@@ -2413,12 +2433,12 @@ function updatePrecookResult() {
     if (startAt < now) {
         resultEl.classList.add("precook-result--late");
         const lateByMins = Math.round((now - startAt) / 60000);
-        $("#precook-start-time").textContent = `${cookingStartTimeStr} (${lateByMins} min ago — start now!)`;
+        $("#precook-start-time").textContent = t("precook.lateStart", { time: cookingStartTimeStr, mins: lateByMins });
     } else {
         resultEl.classList.remove("precook-result--late");
         const inMins = Math.round((startAt - now) / 60000);
         if (inMins > 0) {
-            $("#precook-start-time").textContent = `${cookingStartTimeStr} (in ${inMins} min)`;
+            $("#precook-start-time").textContent = t("precook.inMinutes", { time: cookingStartTimeStr, mins: inMins });
         }
     }
     show(resultEl);
@@ -2441,7 +2461,7 @@ $("#precook-cancel").addEventListener("click", () => {
 
 function enterCookingMode(recipe) {
     if (!recipe || !recipe.instructions || recipe.instructions.length === 0) {
-        alert("This recipe has no steps to cook!");
+        alert(t("cooking.noSteps"));
         return;
     }
 
@@ -2463,7 +2483,7 @@ function enterCookingMode(recipe) {
 
     const startBanner = $("#cooking-start-time");
     if (cookingStartTimeStr) {
-        $("#cooking-start-time-text").textContent = `Start at ${cookingStartTimeStr}`;
+        $("#cooking-start-time-text").textContent = t("precook.startAtSimple", { time: cookingStartTimeStr });
         const mins = parseTotalTimeMinutes(recipe.total_time);
         const timeVal = $("#precook-time-input").value;
         if (timeVal && mins) {
@@ -2474,10 +2494,10 @@ function enterCookingMode(recipe) {
             const startAt = new Date(readyBy.getTime() - mins * 60000);
             if (startAt < new Date()) {
                 startBanner.classList.add("is-late");
-                $("#cooking-start-time-text").textContent = `Ready by ${timeVal} — start now!`;
+                $("#cooking-start-time-text").textContent = t("precook.readyByNow", { time: timeVal });
             } else {
                 startBanner.classList.remove("is-late");
-                $("#cooking-start-time-text").textContent = `Start at ${cookingStartTimeStr} · Ready by ${timeVal}`;
+                $("#cooking-start-time-text").textContent = t("precook.startAtBanner", { start: cookingStartTimeStr, ready: timeVal });
             }
         }
         show(startBanner);
@@ -2521,7 +2541,7 @@ function renderCookingStep() {
     const pct = ((step + 1) / total) * 100;
     $("#cooking-progress-bar").style.width = `${pct}%`;
 
-    $("#cooking-step-label").textContent = `Step ${step + 1} of ${total}`;
+    $("#cooking-step-label").textContent = t("cooking.stepOf", { step: step + 1, total });
 
     const textEl = $("#cooking-step-text");
     textEl.textContent = steps[step];
@@ -2529,10 +2549,10 @@ function renderCookingStep() {
     $("#cooking-prev").disabled = step === 0;
 
     if (step === total - 1) {
-        $("#cooking-next").textContent = "✅ Done!";
+        $("#cooking-next").textContent = "✅ " + t("cooking.done");
         $("#cooking-next").classList.add("cooking-finish");
     } else {
-        $("#cooking-next").textContent = "Next →";
+        $("#cooking-next").textContent = t("cooking.next");
         $("#cooking-next").classList.remove("cooking-finish");
     }
 }
@@ -2713,10 +2733,10 @@ function formatDates(dates) {
     if (!dates || dates.length === 0) return "No dates";
     const opts = { day: "numeric", month: "short" };
     if (dates.length <= 3) {
-        return dates.map(d => new Date(d + "T00:00:00").toLocaleDateString(undefined, opts)).join(", ");
+        return dates.map(d => new Date(d + "T00:00:00").toLocaleDateString(getLocale(), opts)).join(", ");
     }
-    const first = new Date(dates[0] + "T00:00:00").toLocaleDateString(undefined, opts);
-    const last = new Date(dates[dates.length - 1] + "T00:00:00").toLocaleDateString(undefined, { ...opts, year: "numeric" });
+    const first = new Date(dates[0] + "T00:00:00").toLocaleDateString(getLocale(), opts);
+    const last = new Date(dates[dates.length - 1] + "T00:00:00").toLocaleDateString(getLocale(), { ...opts, year: "numeric" });
     return `${first} – ${last} (${dates.length} days)`;
 }
 
