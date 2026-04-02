@@ -81,6 +81,26 @@ def init_db():
         conn.execute("ALTER TABLE users ADD COLUMN facebook_id TEXT UNIQUE")
     except Exception:
         pass  # column already exists
+    # Recovery: if a previous migration left users_old behind (failed midway),
+    # restore its data into the current users table so no user IDs are lost.
+    try:
+        if conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='users_old'"
+        ).fetchone():
+            old_cols = [r[1] for r in conn.execute("PRAGMA table_info(users_old)").fetchall()]
+            if "facebook_id" in old_cols:
+                conn.execute("""
+                    INSERT OR IGNORE INTO users (id, google_id, facebook_id, email, name, picture, created_at)
+                    SELECT id, google_id, facebook_id, email, name, picture, created_at FROM users_old
+                """)
+            else:
+                conn.execute("""
+                    INSERT OR IGNORE INTO users (id, google_id, email, name, picture, created_at)
+                    SELECT id, google_id, email, name, picture, created_at FROM users_old
+                """)
+            conn.execute("DROP TABLE users_old")
+    except Exception:
+        pass
     # Migration: relax google_id NOT NULL constraint
     try:
         cur = conn.execute("PRAGMA table_info(users)")
@@ -99,8 +119,8 @@ def init_db():
                 )
             """)
             conn.execute("""
-                INSERT INTO users (id, google_id, email, name, picture, created_at)
-                SELECT id, google_id, email, name, picture, created_at FROM users_old
+                INSERT INTO users (id, google_id, facebook_id, email, name, picture, created_at)
+                SELECT id, google_id, facebook_id, email, name, picture, created_at FROM users_old
             """)
             conn.execute("DROP TABLE users_old")
     except Exception:
