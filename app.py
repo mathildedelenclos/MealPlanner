@@ -507,6 +507,34 @@ def api_categorize_ingredient():
     return jsonify({"category": models.categorize_ingredient(text)})
 
 
+@app.route("/api/custom-shopping-items", methods=["GET"])
+def api_get_custom_shopping_items():
+    return jsonify(models.get_custom_shopping_items())
+
+
+@app.route("/api/custom-shopping-items", methods=["POST"])
+def api_add_custom_shopping_item():
+    data = request.get_json(force=True)
+    text = data.get("text", "").strip()
+    if not text:
+        return jsonify({"error": "text is required"}), 400
+    category = models.categorize_ingredient(text)
+    item_id = models.add_custom_shopping_item(text, category)
+    return jsonify({"id": item_id, "text": text, "category": category}), 201
+
+
+@app.route("/api/custom-shopping-items/<int:item_id>", methods=["DELETE"])
+def api_delete_custom_shopping_item(item_id):
+    models.delete_custom_shopping_item(item_id)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/custom-shopping-items", methods=["DELETE"])
+def api_clear_custom_shopping_items():
+    models.clear_custom_shopping_items()
+    return jsonify({"ok": True})
+
+
 @app.route("/api/shopping-list", methods=["GET"])
 def api_shopping_list():
     start = request.args.get("start", "").strip()

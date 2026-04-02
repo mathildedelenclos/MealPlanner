@@ -41,6 +41,14 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
         );
+
+        CREATE TABLE IF NOT EXISTS custom_shopping_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            text TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'Other',
+            checked INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
     """)
     conn.commit()
     conn.close()
@@ -304,6 +312,41 @@ def categorize_ingredient(text):
             if kw in core:
                 return category
     return "Other"
+
+
+# ---------- Custom Shopping Items ----------
+
+def get_custom_shopping_items():
+    conn = get_db()
+    rows = conn.execute("SELECT id, text, category, checked FROM custom_shopping_items ORDER BY created_at").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def add_custom_shopping_item(text, category="Other"):
+    conn = get_db()
+    cur = conn.execute(
+        "INSERT INTO custom_shopping_items (text, category) VALUES (?, ?)",
+        (text, category)
+    )
+    conn.commit()
+    item_id = cur.lastrowid
+    conn.close()
+    return item_id
+
+
+def delete_custom_shopping_item(item_id):
+    conn = get_db()
+    conn.execute("DELETE FROM custom_shopping_items WHERE id = ?", (item_id,))
+    conn.commit()
+    conn.close()
+
+
+def clear_custom_shopping_items():
+    conn = get_db()
+    conn.execute("DELETE FROM custom_shopping_items")
+    conn.commit()
+    conn.close()
 
 
 def get_shopping_list_for_range(start_date, end_date):

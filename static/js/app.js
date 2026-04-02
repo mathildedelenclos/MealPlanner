@@ -1687,10 +1687,23 @@ function renderShoppingList(items) {
             const recipeAttr = recipes.length > 0
                 ? `<span class="shopping-recipe-attr">${escHtml(recipes.join(", "))}</span>`
                 : "";
-            return `<li data-category="${escHtml(cat)}"><label class="shopping-item"><input type="checkbox"><span class="shopping-item-content"><span class="shopping-item-text">${escHtml(text)}</span>${recipeAttr}</span></label><a class="ocado-link" href="${ocadoUrl}" target="_blank" rel="noopener noreferrer" title="Search on Ocado"><img src="https://www.ocado.com/favicon.ico" alt="Ocado" class="ocado-icon"></a></li>`;
+            const deleteBtn = item.custom_id
+                ? `<button class="btn-remove-custom" data-custom-id="${item.custom_id}" title="Remove">&times;</button>`
+                : "";
+            return `<li data-category="${escHtml(cat)}"><label class="shopping-item"><input type="checkbox"><span class="shopping-item-content"><span class="shopping-item-text">${escHtml(text)}</span>${recipeAttr}</span></label>${deleteBtn}<a class="ocado-link" href="${ocadoUrl}" target="_blank" rel="noopener noreferrer" title="Search on Ocado"><img src="https://www.ocado.com/favicon.ico" alt="Ocado" class="ocado-icon"></a></li>`;
         }).join("");
     }
     list.innerHTML = html;
+
+    // Bind delete buttons for custom items
+    list.querySelectorAll(".btn-remove-custom").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            await fetch(`${API}/api/custom-shopping-items/${btn.dataset.customId}`, { method: "DELETE" });
+            loadShoppingView();
+        });
+    });
+
     show($("#shopping-list-container"));
 }
 
@@ -1700,8 +1713,18 @@ async function loadShoppingView() {
     const rangeText = formatWeekLabel(start, end);
     $("#shopping-date-range").textContent = label ? `${label}: ${rangeText}` : rangeText;
 
-    const res = await fetch(`${API}/api/shopping-list?start=${start}&end=${end}`);
+    const [res, customRes] = await Promise.all([
+        fetch(`${API}/api/shopping-list?start=${start}&end=${end}`),
+        fetch(`${API}/api/custom-shopping-items`),
+    ]);
     const items = await res.json();
+    const customItems = await customRes.json();
+
+    // Merge custom items into the list
+    customItems.forEach((ci) => {
+        items.push({ text: ci.text, category: ci.category, recipes: [], custom_id: ci.id });
+    });
+
     renderShoppingList(items);
 }
 
@@ -1723,43 +1746,12 @@ $("#shopping-items").addEventListener("click", (e) => {
 // Add custom item to shopping list
 async function addShoppingItem(text) {
     if (!text.trim()) return;
-
-    // Get category from backend
-    let category = "Other";
-    try {
-        const res = await fetch(`${API}/api/categorize-ingredient`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: text.trim() }),
-        });
-        const data = await res.json();
-        category = data.category || "Other";
-    } catch (e) { /* fall back to Other */ }
-
-    const list = $("#shopping-items");
-    const ocadoUrl = ocadoSearchUrl(text.trim());
-    const li = document.createElement("li");
-    li.dataset.category = category;
-    li.innerHTML = `<label class="shopping-item"><input type="checkbox"><span class="shopping-item-content"><span class="shopping-item-text">${escHtml(text.trim())}</span></span></label><a class="ocado-link" href="${ocadoUrl}" target="_blank" rel="noopener noreferrer" title="Search on Ocado"><img src="https://www.ocado.com/favicon.ico" alt="Ocado" class="ocado-icon"></a>`;
-
-    let header = list.querySelector(`.shopping-category-header[data-category="${CSS.escape(category)}"]`);
-    if (!header) {
-        header = document.createElement("li");
-        header.className = "shopping-category-header";
-        header.dataset.category = category;
-        header.innerHTML = `<span class="shopping-category-left"><span class="shopping-category-chevron">&#9662;</span><span class="shopping-category-name">${escHtml(category)}</span></span><span class="shopping-category-count">0</span>`;
-        list.appendChild(header);
-    }
-
-    const catItems = [...list.querySelectorAll(`li[data-category="${CSS.escape(category)}"]:not(.shopping-category-header)`)];
-    if (catItems.length > 0) {
-        catItems[catItems.length - 1].after(li);
-    } else {
-        header.after(li);
-    }
-
-    const count = list.querySelectorAll(`li[data-category="${CSS.escape(category)}"]:not(.shopping-category-header)`).length;
-    header.querySelector(".shopping-category-count").textContent = count;
+    await fetch(`${API}/api/custom-shopping-items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text.trim() }),
+    });
+    loadShoppingView();
 }
 
 $("#btn-add-shopping-item").addEventListener("click", () => {
@@ -1825,7 +1817,8 @@ $("#btn-copy-shopping").addEventListener("click", async () => {
 });
 
 // Clear all shopping list items
-$("#btn-clear-shopping").addEventListener("click", () => {
+$("#btn-clear-shopping").addEventListener("click", async () => {
+    await fetch(`${API}/api/custom-shopping-items`, { method: "DELETE" });
     $("#shopping-items").innerHTML = "";
     hide($("#shopping-list-container"));
     show($("#shopping-empty"));
