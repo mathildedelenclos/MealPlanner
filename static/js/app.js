@@ -1938,12 +1938,12 @@ function saveCheckedItems(start, end, items) {
 function getWeekRange(offset) {
     const now = new Date();
     const day = now.getDay();
-    const diffToMon = day === 0 ? -6 : 1 - day;
-    const mon = new Date(now);
-    mon.setDate(now.getDate() + diffToMon + (offset * 7));
-    const sun = new Date(mon);
-    sun.setDate(mon.getDate() + 6);
-    return { start: isoDate(mon), end: isoDate(sun) };
+    const diff = (day - weekStartDay + 7) % 7;
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - diff + (offset * 7));
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    return { start: isoDate(weekStart), end: isoDate(weekEnd) };
 }
 
 function formatWeekLabel(start, end) {
