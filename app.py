@@ -122,6 +122,7 @@ def _get_gemini():
 @app.route("/")
 @app.route("/calendar")
 @app.route("/recipes")
+@app.route("/favourites")
 @app.route("/shopping")
 @app.route("/chat")
 @app.route("/settings")
@@ -309,6 +310,15 @@ def api_update_recipe(recipe_id):
         categories=data.get("categories"),
     )
     return jsonify({"ok": True})
+
+
+@app.route("/api/recipes/<int:recipe_id>/favourite", methods=["POST"])
+@login_required_api
+def api_toggle_favourite(recipe_id):
+    result = models.toggle_favourite(session["user_id"], recipe_id)
+    if result is None:
+        return jsonify({"error": "Recipe not found"}), 404
+    return jsonify({"is_favourite": result})
 
 
 # ──────────────────────────────────────

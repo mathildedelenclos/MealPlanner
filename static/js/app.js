@@ -36,6 +36,7 @@ const PATH_TO_VIEW = {
     "/": "meal-plans",
     "/calendar": "meal-plans",
     "/recipes": "recipes",
+    "/favourites": "favourites",
     "/shopping": "shopping",
     "/chat": "chat",
     "/settings": "settings",
@@ -44,6 +45,7 @@ const PATH_TO_VIEW = {
 const VIEW_TO_PATH = {
     "meal-plans": "/calendar",
     "recipes": "/recipes",
+    "favourites": "/favourites",
     "shopping": "/shopping",
     "chat": "/chat",
     "settings": "/settings",
@@ -64,6 +66,7 @@ function navigateToView(view, pushState = true) {
     // Load data for the view
     if (view === "meal-plans") loadCalendar();
     if (view === "recipes") loadRecipes();
+    if (view === "favourites") loadFavourites();
     if (view === "shopping") loadShoppingView();
 }
 
@@ -373,8 +376,10 @@ async function loadRecipes() {
                 <span class="meta">${r.servings || ""}${(r.categories || []).length ? (r.servings ? " · " : "") + r.categories.map(c => escHtml(c)).join(", ") : ""}</span>
             </div>
             ${r.total_time ? `<span class="recipe-row-time">⏱ ${escHtml(r.total_time)}</span>` : ""}
+            <button class="btn-favourite${r.is_favourite ? " is-favourite" : ""}" data-id="${r.id}" title="${t("favourites.toggle")}">${r.is_favourite ? "❤️" : "🤍"}</button>
         </div>` : `
         <div class="recipe-card" data-id="${r.id}">
+            <button class="btn-favourite${r.is_favourite ? " is-favourite" : ""}" data-id="${r.id}" title="${t("favourites.toggle")}">${r.is_favourite ? "❤️" : "🤍"}</button>
             ${
                 r.image_url
                     ? `<img class="recipe-card-img" src="${r.image_url}" alt="${r.title}">`
@@ -407,8 +412,70 @@ async function loadRecipes() {
                 updateBulkActionBar();
             });
         }
+        const favBtn = card.querySelector(".btn-favourite");
+        if (favBtn) {
+            favBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                toggleFavourite(parseInt(favBtn.dataset.id), favBtn);
+            });
+        }
         card.addEventListener("click", (e) => {
             if (e.target.classList.contains("recipe-select-cb")) return;
+            if (e.target.closest(".btn-favourite")) return;
+            openRecipeModal(card.dataset.id);
+        });
+    });
+}
+
+async function toggleFavourite(recipeId, btn) {
+    const res = await fetch(`${API}/api/recipes/${recipeId}/favourite`, { method: "POST" });
+    const data = await res.json();
+    if (data.is_favourite) {
+        btn.classList.add("is-favourite");
+        btn.textContent = "❤️";
+    } else {
+        btn.classList.remove("is-favourite");
+        btn.textContent = "🤍";
+    }
+}
+
+async function loadFavourites() {
+    const res = await fetch(`${API}/api/recipes`);
+    const recipes = await res.json();
+    const container = $("#favourites-list");
+    const favourites = recipes.filter((r) => r.is_favourite);
+
+    if (favourites.length === 0) {
+        container.innerHTML = `<div class="empty-state"><span class="emoji">❤️</span>${t("favourites.empty")}</div>`;
+        return;
+    }
+
+    container.className = "recipes-grid";
+    container.innerHTML = favourites.map((r) => `
+        <div class="recipe-card" data-id="${r.id}">
+            <button class="btn-favourite is-favourite" data-id="${r.id}" title="${t("favourites.toggle")}">❤️</button>
+            ${r.image_url
+                ? `<img class="recipe-card-img" src="${r.image_url}" alt="${escHtml(r.title)}">`
+                : `<div class="recipe-card-img placeholder">🍳</div>`}
+            <div class="recipe-card-body">
+                <h3>${escHtml(r.title)}</h3>
+                <span class="meta">${r.total_time || ""} ${r.servings ? "· " + r.servings : ""}</span>
+                ${(r.categories || []).length > 0
+                    ? `<div class="recipe-card-cats">${r.categories.map((c) => `<span class="cat-pill">${escHtml(c)}</span>`).join("")}</div>`
+                    : ""}
+            </div>
+        </div>`).join("");
+
+    container.querySelectorAll(".recipe-card").forEach((card) => {
+        const favBtn = card.querySelector(".btn-favourite");
+        if (favBtn) {
+            favBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                toggleFavourite(parseInt(favBtn.dataset.id), favBtn).then(() => loadFavourites());
+            });
+        }
+        card.addEventListener("click", (e) => {
+            if (e.target.closest(".btn-favourite")) return;
             openRecipeModal(card.dataset.id);
         });
     });

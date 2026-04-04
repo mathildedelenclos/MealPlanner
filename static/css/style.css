@@ -527,9 +527,47 @@ body {
     overflow: hidden;
     cursor: pointer;
     transition: box-shadow var(--transition), transform var(--transition);
+    position: relative;
 }
 
 .recipe-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-2px); }
+
+/* Favourite heart button */
+.btn-favourite {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 2;
+    background: rgba(255,255,255,0.85);
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+    transition: transform 0.15s ease, background 0.15s ease;
+    line-height: 1;
+    padding: 0;
+}
+.btn-favourite:hover {
+    transform: scale(1.15);
+    background: rgba(255,255,255,1);
+}
+.btn-favourite.is-favourite {
+    background: rgba(255,255,255,0.95);
+}
+
+/* Heart button in list view */
+.recipe-row { position: relative; }
+.recipe-row .btn-favourite {
+    position: static;
+    flex-shrink: 0;
+    margin-left: auto;
+}
 
 .recipe-card-img {
     width: 100%;

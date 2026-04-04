@@ -11,6 +11,7 @@ const TRANSLATIONS = {
     // Navigation
     "nav.calendar": "Calendar",
     "nav.recipes": "Recipes",
+    "nav.favourites": "Favourites",
     "nav.shopping": "Shopping",
     "nav.chat": "AI Chef",
     "nav.settings": "Settings",
@@ -106,6 +107,10 @@ const TRANSLATIONS = {
     "recipes.fetchError": "Failed to fetch recipe. Please check the URL.",
     "recipes.createCategory": "+ Create \"{{name}}\"",
     "recipes.switchView": "Switch view",
+
+    // Favourites
+    "favourites.toggle": "Toggle favourite",
+    "favourites.empty": "No favourites yet. Tap the heart on a recipe to add it here!",
 
     // Bulk actions
     "bulk.selected": "{{count}} selected",
@@ -213,6 +218,7 @@ const TRANSLATIONS = {
     // Navigation
     "nav.calendar": "Calendrier",
     "nav.recipes": "Recettes",
+    "nav.favourites": "Favoris",
     "nav.shopping": "Courses",
     "nav.chat": "Chef IA",
     "nav.settings": "Param\u00e8tres",
@@ -308,6 +314,10 @@ const TRANSLATIONS = {
     "recipes.fetchError": "Impossible de r\u00e9cup\u00e9rer la recette. V\u00e9rifiez l'URL.",
     "recipes.createCategory": "+ Cr\u00e9er \u00ab\u00a0{{name}}\u00a0\u00bb",
     "recipes.switchView": "Changer la vue",
+
+    // Favourites
+    "favourites.toggle": "Basculer en favori",
+    "favourites.empty": "Pas encore de favoris. Appuyez sur le c\u0153ur d'une recette pour l'ajouter ici\u00a0!",
 
     // Bulk actions
     "bulk.selected": "{{count}} s\u00e9lectionn\u00e9(s)",

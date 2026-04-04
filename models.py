@@ -76,6 +76,11 @@ def init_db():
             conn.execute(f"ALTER TABLE {table} ADD COLUMN user_id INTEGER REFERENCES users(id)")
         except Exception:
             pass  # column already exists
+    # Migration: add is_favourite column to recipes
+    try:
+        conn.execute("ALTER TABLE recipes ADD COLUMN is_favourite INTEGER NOT NULL DEFAULT 0")
+    except Exception:
+        pass  # column already exists
     # Migration: add facebook_id column to users table
     try:
         conn.execute("ALTER TABLE users ADD COLUMN facebook_id TEXT UNIQUE")
@@ -380,6 +385,19 @@ def update_recipe_image(recipe_id, image_url):
     conn.close()
 
 
+def toggle_favourite(user_id, recipe_id):
+    conn = get_db()
+    row = conn.execute("SELECT is_favourite FROM recipes WHERE id = ? AND user_id = ?", (recipe_id, user_id)).fetchone()
+    if row is None:
+        conn.close()
+        return None
+    new_val = 0 if row["is_favourite"] else 1
+    conn.execute("UPDATE recipes SET is_favourite = ? WHERE id = ? AND user_id = ?", (new_val, recipe_id, user_id))
+    conn.commit()
+    conn.close()
+    return bool(new_val)
+
+
 def _recipe_row_to_dict(row):
     return {
         "id": row["id"],
@@ -392,6 +410,7 @@ def _recipe_row_to_dict(row):
         "ingredients": json.loads(row["ingredients"]),
         "instructions": json.loads(row["instructions"]),
         "created_at": row["created_at"],
+        "is_favourite": bool(row["is_favourite"]) if "is_favourite" in row.keys() else False,
     }
 
 

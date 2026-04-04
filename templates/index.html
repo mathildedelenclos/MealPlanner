@@ -18,6 +18,7 @@
         <ul class="nav-links">
             <li><a href="/calendar" class="nav-link" data-view="meal-plans">📅 <span data-i18n="nav.calendar">Calendar</span></a></li>
             <li><a href="/recipes" class="nav-link" data-view="recipes">📖 <span data-i18n="nav.recipes">Recipes</span></a></li>
+            <li><a href="/favourites" class="nav-link" data-view="favourites">❤️ <span data-i18n="nav.favourites">Favourites</span></a></li>
             <li><a href="/shopping" class="nav-link" data-view="shopping">🛒 <span data-i18n="nav.shopping">Shopping</span></a></li>
             <li><a href="/chat" class="nav-link" data-view="chat">🤖 <span data-i18n="nav.chat">AI Chef</span></a></li>
             <li><a href="/settings" class="nav-link" data-view="settings">⚙️ <span data-i18n="nav.settings">Settings</span></a></li>
@@ -199,6 +200,14 @@
                     <button class="btn btn-small btn-ghost" id="btn-cancel-select" data-i18n="common.cancel">Cancel</button>
                 </div>
             </div>
+        </section>
+
+        <!-- ═══ FAVOURITES VIEW ═══ -->
+        <section id="view-favourites" class="view">
+            <div class="view-header">
+                <h2 data-i18n="nav.favourites">Favourites</h2>
+            </div>
+            <div id="favourites-list" class="recipes-grid"></div>
         </section>
 
         <!-- ═══ AI CHAT VIEW ═══ -->
