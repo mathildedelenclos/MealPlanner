@@ -67,7 +67,16 @@ function navigateToView(view, pushState = true) {
     if (view === "meal-plans") loadCalendar();
     if (view === "recipes") loadRecipes();
     if (view === "favourites") loadFavourites();
-    if (view === "shopping") loadShoppingView();
+    if (view === "shopping") {
+        const weekParam = new URLSearchParams(location.search).get("week");
+        if (weekParam) {
+            const target = new Date(weekParam + "T00:00:00");
+            const { start } = getWeekRange(0);
+            const current = new Date(start + "T00:00:00");
+            shoppingWeekOffset = Math.round((target - current) / (7 * 86400000));
+        }
+        loadShoppingView();
+    }
 }
 
 $$(".nav-link").forEach((link) => {
@@ -1912,6 +1921,20 @@ const CATEGORY_ORDER = [
 
 let shoppingWeekOffset = 1; // default to next week
 
+function shoppingCheckedKey(start, end) {
+    return `shopping-checked:${start}:${end}`;
+}
+
+function getCheckedItems(start, end) {
+    try {
+        return JSON.parse(localStorage.getItem(shoppingCheckedKey(start, end))) || [];
+    } catch { return []; }
+}
+
+function saveCheckedItems(start, end, items) {
+    localStorage.setItem(shoppingCheckedKey(start, end), JSON.stringify(items));
+}
+
 function getWeekRange(offset) {
     const now = new Date();
     const day = now.getDay();
@@ -1931,7 +1954,7 @@ function formatWeekLabel(start, end) {
     return `${sLabel} – ${eLabel}`;
 }
 
-function renderShoppingList(items) {
+function renderShoppingList(items, start, end) {
     const list = $("#shopping-items");
     if (items.length === 0) {
         hide($("#shopping-list-container"));
@@ -1973,6 +1996,28 @@ function renderShoppingList(items) {
         });
     });
 
+    // Restore checked state from localStorage
+    const checked = new Set(getCheckedItems(start, end));
+    list.querySelectorAll("li:not(.shopping-category-header)").forEach((li) => {
+        const text = li.querySelector(".shopping-item-text")?.textContent;
+        if (text && checked.has(text)) {
+            li.querySelector("input[type=checkbox]").checked = true;
+        }
+    });
+
+    // Save checked state on change
+    list.querySelectorAll("input[type=checkbox]").forEach((cb) => {
+        cb.addEventListener("change", () => {
+            const currentChecked = [];
+            list.querySelectorAll("li:not(.shopping-category-header)").forEach((li) => {
+                const box = li.querySelector("input[type=checkbox]");
+                const text = li.querySelector(".shopping-item-text")?.textContent;
+                if (box?.checked && text) currentChecked.push(text);
+            });
+            saveCheckedItems(start, end, currentChecked);
+        });
+    });
+
     show($("#shopping-list-container"));
 }
 
@@ -1982,9 +2027,12 @@ async function loadShoppingView() {
     const rangeText = formatWeekLabel(start, end);
     $("#shopping-date-range").textContent = label ? `${label}: ${rangeText}` : rangeText;
 
+    // Keep URL in sync with the viewed week
+    history.replaceState({ view: "shopping" }, "", `/shopping?week=${start}`);
+
     const [res, customRes] = await Promise.all([
         fetch(`${API}/api/shopping-list?start=${start}&end=${end}`),
-        fetch(`${API}/api/custom-shopping-items`),
+        fetch(`${API}/api/custom-shopping-items?week_start=${start}`),
     ]);
     const items = await res.json();
     const customItems = await customRes.json();
@@ -1994,7 +2042,7 @@ async function loadShoppingView() {
         items.push({ text: ci.text, category: ci.category, recipes: [], custom_id: ci.id });
     });
 
-    renderShoppingList(items);
+    renderShoppingList(items, start, end);
 }
 
 $("#shopping-week-prev").addEventListener("click", () => { shoppingWeekOffset--; loadShoppingView(); });
@@ -2015,10 +2063,11 @@ $("#shopping-items").addEventListener("click", (e) => {
 // Add custom item to shopping list
 async function addShoppingItem(text) {
     if (!text.trim()) return;
+    const { start } = getWeekRange(shoppingWeekOffset);
     await fetch(`${API}/api/custom-shopping-items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: text.trim() }),
+        body: JSON.stringify({ text: text.trim(), week_start: start }),
     });
     loadShoppingView();
 }
@@ -2085,12 +2134,11 @@ $("#btn-copy-shopping").addEventListener("click", async () => {
     setTimeout(() => $("#btn-copy-shopping").textContent = "📋 " + t("shopping.copy"), 2500);
 });
 
-// Clear all shopping list items
+// Clear all shopping list items for the current week
 $("#btn-clear-shopping").addEventListener("click", async () => {
-    await fetch(`${API}/api/custom-shopping-items`, { method: "DELETE" });
-    $("#shopping-items").innerHTML = "";
-    hide($("#shopping-list-container"));
-    show($("#shopping-empty"));
+    const { start } = getWeekRange(shoppingWeekOffset);
+    await fetch(`${API}/api/custom-shopping-items?week_start=${start}`, { method: "DELETE" });
+    loadShoppingView();
 });
 
 // ═══════════════════════════════════

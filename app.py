@@ -699,7 +699,8 @@ def api_categorize_ingredient():
 @app.route("/api/custom-shopping-items", methods=["GET"])
 @login_required_api
 def api_get_custom_shopping_items():
-    return jsonify(models.get_custom_shopping_items(session["user_id"]))
+    week_start = request.args.get("week_start")
+    return jsonify(models.get_custom_shopping_items(session["user_id"], week_start))
 
 
 @app.route("/api/custom-shopping-items", methods=["POST"])
@@ -710,7 +711,8 @@ def api_add_custom_shopping_item():
     if not text:
         return jsonify({"error": "text is required"}), 400
     category = models.categorize_ingredient(text)
-    item_id = models.add_custom_shopping_item(session["user_id"], text, category)
+    week_start = data.get("week_start")
+    item_id = models.add_custom_shopping_item(session["user_id"], text, category, week_start)
     return jsonify({"id": item_id, "text": text, "category": category}), 201
 
 
@@ -724,7 +726,8 @@ def api_delete_custom_shopping_item(item_id):
 @app.route("/api/custom-shopping-items", methods=["DELETE"])
 @login_required_api
 def api_clear_custom_shopping_items():
-    models.clear_custom_shopping_items(session["user_id"])
+    week_start = request.args.get("week_start")
+    models.clear_custom_shopping_items(session["user_id"], week_start)
     return jsonify({"ok": True})
 
 

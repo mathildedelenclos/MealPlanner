@@ -81,6 +81,11 @@ def init_db():
         conn.execute("ALTER TABLE recipes ADD COLUMN is_favourite INTEGER NOT NULL DEFAULT 0")
     except Exception:
         pass  # column already exists
+    # Migration: add week_start column to custom_shopping_items
+    try:
+        conn.execute("ALTER TABLE custom_shopping_items ADD COLUMN week_start TEXT")
+    except Exception:
+        pass  # column already exists
     # Migration: add facebook_id column to users table
     try:
         conn.execute("ALTER TABLE users ADD COLUMN facebook_id TEXT UNIQUE")
@@ -172,10 +177,11 @@ def init_db():
                     text TEXT NOT NULL, category TEXT NOT NULL DEFAULT 'Other',
                     checked INTEGER NOT NULL DEFAULT 0,
                     user_id INTEGER REFERENCES users(id),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    week_start TEXT
                 )""",
                 """INSERT INTO custom_shopping_items_new
-                   SELECT id, text, category, checked, user_id, created_at FROM custom_shopping_items""",
+                   SELECT id, text, category, checked, user_id, created_at, week_start FROM custom_shopping_items""",
             ),
         ):
             fk_list = conn.execute(f"PRAGMA foreign_key_list({tbl})").fetchall()
@@ -598,18 +604,25 @@ def categorize_ingredient(text):
 
 # ---------- Custom Shopping Items ----------
 
-def get_custom_shopping_items(user_id):
+def get_custom_shopping_items(user_id, week_start=None):
     conn = get_db()
-    rows = conn.execute("SELECT id, text, category, checked FROM custom_shopping_items WHERE user_id = ? ORDER BY created_at", (user_id,)).fetchall()
+    if week_start:
+        rows = conn.execute(
+            "SELECT id, text, category, checked FROM custom_shopping_items WHERE user_id = ? AND week_start = ? ORDER BY created_at",
+            (user_id, week_start)).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT id, text, category, checked FROM custom_shopping_items WHERE user_id = ? ORDER BY created_at",
+            (user_id,)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
 
-def add_custom_shopping_item(user_id, text, category="Other"):
+def add_custom_shopping_item(user_id, text, category="Other", week_start=None):
     conn = get_db()
     cur = conn.execute(
-        "INSERT INTO custom_shopping_items (text, category, user_id) VALUES (?, ?, ?)",
-        (text, category, user_id)
+        "INSERT INTO custom_shopping_items (text, category, user_id, week_start) VALUES (?, ?, ?, ?)",
+        (text, category, user_id, week_start)
     )
     conn.commit()
     item_id = cur.lastrowid
@@ -624,9 +637,12 @@ def delete_custom_shopping_item(user_id, item_id):
     conn.close()
 
 
-def clear_custom_shopping_items(user_id):
+def clear_custom_shopping_items(user_id, week_start=None):
     conn = get_db()
-    conn.execute("DELETE FROM custom_shopping_items WHERE user_id = ?", (user_id,))
+    if week_start:
+        conn.execute("DELETE FROM custom_shopping_items WHERE user_id = ? AND week_start = ?", (user_id, week_start))
+    else:
+        conn.execute("DELETE FROM custom_shopping_items WHERE user_id = ?", (user_id,))
     conn.commit()
     conn.close()
 
