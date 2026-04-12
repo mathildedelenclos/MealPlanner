@@ -974,6 +974,9 @@ $("#btn-scrape").addEventListener("click", async () => {
 
     hide($("#scrape-result"));
     hide($("#scrape-error"));
+
+    const isSocial = /tiktok\.com|instagram\.com\/(reel|p)\/|facebook\.com\/(reel|watch)|fb\.watch/i.test(url);
+    $("#scrape-loading-text").textContent = isSocial ? t("recipes.fetchingVideo") : t("recipes.fetching");
     show($("#scrape-loading"));
 
     try {

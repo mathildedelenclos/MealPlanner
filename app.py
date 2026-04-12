@@ -325,6 +325,134 @@ def api_toggle_favourite(recipe_id):
 # URL Recipe Scraper
 # ──────────────────────────────────────
 
+_SOCIAL_VIDEO_PATTERNS = re.compile(
+    r"(tiktok\.com|vm\.tiktok\.com|instagram\.com/(reel|p)/|instagram\.com/.*/(reel|p)/|facebook\.com/(reel|watch)|fb\.watch)",
+    re.IGNORECASE,
+)
+
+
+def _is_social_video_url(url):
+    return bool(_SOCIAL_VIDEO_PATTERNS.search(url))
+
+
+def _extract_recipe_from_social_video(url):
+    """Fetch a social media video page and use Gemini to extract the recipe."""
+    from bs4 import BeautifulSoup
+
+    client = _get_gemini()
+    if client is None:
+        return None, "Gemini API key is required to import recipes from video URLs."
+
+    # Fetch the page HTML
+    resp = requests.get(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        },
+        timeout=15,
+        allow_redirects=True,
+    )
+    html = resp.text
+    final_url = resp.url  # after redirects
+
+    soup = BeautifulSoup(html, "html.parser")
+
+    # Collect useful metadata from the page
+    parts = []
+
+    # og/meta tags
+    for tag in soup.find_all("meta"):
+        prop = tag.get("property", "") or tag.get("name", "")
+        content = tag.get("content", "")
+        if content and any(k in prop.lower() for k in ("title", "description", "og:")):
+            parts.append(f"{prop}: {content}")
+
+    # JSON-LD blocks
+    for script in soup.find_all("script", type="application/ld+json"):
+        if script.string:
+            parts.append(script.string[:5000])
+
+    # Visible page text (limited)
+    body_text = soup.get_text(separator="\n", strip=True)[:8000]
+    parts.append(body_text)
+
+    page_content = "\n---\n".join(parts)
+
+    # Extract image from og:image
+    og_image = None
+    og_tag = soup.find("meta", property="og:image")
+    if og_tag:
+        og_image = og_tag.get("content")
+
+    prompt = (
+        "The following is the text content extracted from a social media video page "
+        "(TikTok or Instagram) that contains a cooking recipe video.\n\n"
+        f"Page URL: {final_url}\n\n"
+        f"Page content:\n{page_content}\n\n"
+        "Extract the recipe from this page content. If the caption or description mentions "
+        "ingredients or cooking steps, use those. If the information is incomplete, fill in "
+        "reasonable details based on the recipe title/description.\n\n"
+        "Return ONLY a valid JSON object (no markdown fences) with this structure:\n"
+        '{"title": "...", "ingredients": ["..."], "instructions": ["step 1", "step 2", ...], '
+        '"total_time": "... min", "servings": "...", "categories": ["..."]}\n\n'
+        "Use METRIC measurements (grams, ml, °C). "
+        "If you cannot find any recipe in the content, return: "
+        '{"error": "No recipe found in this video"}'
+    )
+
+    lang_key = None
+    try:
+        uid = session.get("user_id")
+        if uid:
+            lang_key = models.get_setting(uid, "language", "en")
+    except Exception:
+        pass
+
+    system = (
+        "You are a recipe extraction assistant. Extract cooking recipes from social media "
+        "video page content. Always use METRIC measurements. Return only valid JSON."
+    )
+    if lang_key == "fr":
+        system += (
+            " The user speaks French. Recipe title, ingredients, and instructions "
+            "should be in French. JSON keys must remain in English."
+        )
+
+    response = client.models.generate_content(
+        model="gemini-3-flash-preview",
+        contents=[{"role": "user", "parts": [{"text": prompt}]}],
+        config={
+            "system_instruction": system,
+            "temperature": 0.3,
+            "max_output_tokens": 4000,
+        },
+    )
+    raw = response.text.strip()
+    if raw.startswith("```"):
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
+
+    parsed = json.loads(raw)
+
+    if "error" in parsed:
+        return None, parsed["error"]
+
+    return {
+        "title": parsed.get("title", "Untitled Recipe"),
+        "ingredients": parsed.get("ingredients", []),
+        "instructions": parsed.get("instructions", []),
+        "image_url": og_image,
+        "total_time": parsed.get("total_time"),
+        "servings": parsed.get("servings"),
+        "source_url": final_url,
+        "categories": parsed.get("categories", []),
+    }, None
+
+
 @app.route("/api/scrape", methods=["POST"])
 @login_required_api
 def api_scrape_url():
@@ -332,6 +460,16 @@ def api_scrape_url():
     url = data.get("url", "").strip()
     if not url:
         return jsonify({"error": "URL is required"}), 400
+
+    # Social media video URLs → use Gemini to extract recipe
+    if _is_social_video_url(url):
+        try:
+            result, error = _extract_recipe_from_social_video(url)
+            if error:
+                return jsonify({"error": error}), 400
+            return jsonify(result)
+        except Exception as exc:
+            return jsonify({"error": f"Could not extract recipe from video: {exc}"}), 400
 
     try:
         html = requests.get(

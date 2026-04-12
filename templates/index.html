@@ -143,12 +143,12 @@
             <!-- Import from URL (hidden) -->
             <div id="import-section" class="card form-card hidden" style="max-width:600px">
                 <div class="url-input-group">
-                    <input type="url" id="import-url" placeholder="https://www.example.com/recipe/..." class="input">
+                    <input type="url" id="import-url" data-i18n-placeholder="recipes.importUrlPlaceholder" placeholder="Paste a URL — recipe site, TikTok, or Instagram…" class="input">
                     <button class="btn btn-primary" id="btn-scrape" data-i18n="recipes.import">Import</button>
                 </div>
                 <div id="scrape-loading" class="hidden loading-indicator">
                     <div class="spinner"></div>
-                    <span data-i18n="recipes.fetching">Fetching recipe…</span>
+                    <span id="scrape-loading-text" data-i18n="recipes.fetching">Fetching recipe…</span>
                 </div>
                 <div id="scrape-error" class="hidden error-msg"></div>
             </div>
