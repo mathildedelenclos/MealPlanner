@@ -2515,6 +2515,7 @@ li.category-hidden {
     min-width: 140px;
 }
 
+
 /* ───────────────────────────────────
    Login Page
    ─────────────────────────────────── */
@@ -2802,4 +2803,15 @@ li.category-hidden {
     .copy-grid { grid-template-columns: repeat(3, 1fr); }
     .cal-cell { min-height: 58px; }
     .cal-entry { font-size: 8px; }
+}
+
+/* ───────────────────────────────────
+   PWA standalone safe areas (iOS)
+   ─────────────────────────────────── */
+@media (display-mode: standalone) {
+    body { padding-top: env(safe-area-inset-top); }
+}
+@media (display-mode: standalone) and (max-width: 600px) {
+    .sidebar { padding-bottom: env(safe-area-inset-bottom); height: calc(60px + env(safe-area-inset-bottom)); }
+    .content { margin-bottom: calc(60px + env(safe-area-inset-bottom)); }
 }

@@ -7,7 +7,7 @@ import zipfile
 import threading
 import requests
 from functools import wraps
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
 from recipe_scrapers import scrape_html
@@ -116,6 +116,20 @@ def _get_gemini():
 
 
 # ──────────────────────────────────────
+# PWA assets (must be served from root for proper scope)
+# ──────────────────────────────────────
+
+@app.route("/sw.js")
+def service_worker():
+    return send_from_directory("static", "sw.js", mimetype="application/javascript")
+
+
+@app.route("/manifest.json")
+def manifest():
+    return send_from_directory("static", "manifest.json", mimetype="application/manifest+json")
+
+
+# ──────────────────────────────────────
 # Pages
 # ──────────────────────────────────────
 
@@ -126,6 +140,7 @@ def _get_gemini():
 @app.route("/shopping")
 @app.route("/chat")
 @app.route("/settings")
+@app.route("/share")
 def index():
     if not session.get("user_id"):
         return redirect("/login")
@@ -527,6 +542,94 @@ def api_scrape_url():
 
     except Exception as exc:
         return jsonify({"error": f"Could not scrape recipe: {exc}"}), 400
+
+
+@app.route("/api/import-url", methods=["POST"])
+@login_required_api
+def api_import_url():
+    """One-step import: scrape a URL and save it directly. Used by iOS Shortcuts."""
+    data = request.get_json(force=True)
+    url = data.get("url", "").strip()
+    if not url:
+        return jsonify({"error": "URL is required"}), 400
+
+    user_id = session["user_id"]
+    recipe_data = None
+
+    # Step 1: scrape / extract
+    if _is_social_video_url(url):
+        result, error = _extract_recipe_from_social_video(url)
+        if error:
+            return jsonify({"error": error}), 400
+        recipe_data = result
+    else:
+        try:
+            html = requests.get(
+                url,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                                  "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                  "Chrome/120.0.0.0 Safari/537.36",
+                },
+                timeout=15,
+            ).text
+            scraper = scrape_html(html=html, org_url=url)
+            title = scraper.title() or "Untitled Recipe"
+            ingredients = scraper.ingredients() or []
+            instructions_raw = scraper.instructions() or ""
+            if isinstance(instructions_raw, str):
+                instructions = [s.strip() for s in re.split(r"\n+", instructions_raw) if s.strip()]
+            else:
+                instructions = list(instructions_raw)
+            image = None
+            try:
+                image = scraper.image()
+            except Exception:
+                pass
+            total_time = None
+            try:
+                total_time = str(scraper.total_time()) + " min"
+            except Exception:
+                pass
+            servings = None
+            try:
+                servings = str(scraper.yields())
+            except Exception:
+                pass
+            recipe_data = {
+                "title": title,
+                "ingredients": ingredients,
+                "instructions": instructions,
+                "image_url": image,
+                "total_time": total_time,
+                "servings": servings,
+                "source_url": url,
+            }
+        except Exception as exc:
+            return jsonify({"error": f"Could not scrape recipe: {exc}"}), 400
+
+    # Step 2: save
+    title = recipe_data.get("title", "").strip()
+    ingredients = recipe_data.get("ingredients", [])
+    if not title or not ingredients:
+        return jsonify({"error": "Could not extract a valid recipe"}), 400
+
+    try:
+        recipe_id = models.create_recipe(
+            user_id,
+            title=title,
+            ingredients=ingredients,
+            instructions=recipe_data.get("instructions", []),
+            source_url=recipe_data.get("source_url"),
+            image_url=recipe_data.get("image_url"),
+            total_time=recipe_data.get("total_time"),
+            servings=recipe_data.get("servings"),
+            categories=recipe_data.get("categories"),
+        )
+    except Exception as e:
+        return jsonify({"error": f"Failed to save recipe: {e}"}), 500
+
+    return jsonify({"success": True, "id": recipe_id, "title": title})
 
 
 # ──────────────────────────────────────

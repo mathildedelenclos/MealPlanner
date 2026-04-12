@@ -40,6 +40,7 @@ const PATH_TO_VIEW = {
     "/shopping": "shopping",
     "/chat": "chat",
     "/settings": "settings",
+    "/share": "recipes",
 };
 
 const VIEW_TO_PATH = {
@@ -135,6 +136,28 @@ function initSettingsUI() {
             navigateToView(view, false);
         });
     }
+
+}
+
+// ═══════════════════════════════════
+// Share Target helpers
+// ═══════════════════════════════════
+
+// Extract a URL from share target query params (apps put the URL in url, text, or title)
+function _extractSharedUrl(params) {
+    const raw = params.get("url") || params.get("text") || params.get("title") || "";
+    // The text field may contain extra prose around the URL — extract the first http(s) link
+    const match = raw.match(/https?:\/\/[^\s]+/i);
+    return match ? match[0] : raw.trim();
+}
+
+// Auto-open the import section, fill the URL, and trigger the scrape
+function _autoImportSharedUrl(url) {
+    show($("#import-section"));
+    hide($("#new-recipe-form"));
+    $("#import-url").value = url;
+    // Small delay so the DOM has rendered
+    setTimeout(() => $("#btn-scrape").click(), 100);
 }
 
 // Resolve initial view from URL on page load
@@ -163,10 +186,20 @@ function initSettingsUI() {
     translatePage();
     initSettingsUI();
 
-    const view = PATH_TO_VIEW[location.pathname] || "meal-plans";
-    navigateToView(view, false);
-    // Replace current history entry so back button works correctly
-    history.replaceState({ view }, "", location.pathname === "/" ? "/calendar" : location.pathname);
+    // Handle share target: /share?url=...&text=...
+    if (location.pathname === "/share") {
+        const params = new URLSearchParams(location.search);
+        const sharedUrl = _extractSharedUrl(params);
+        navigateToView("recipes", false);
+        history.replaceState({ view: "recipes" }, "", "/recipes");
+        if (sharedUrl) {
+            _autoImportSharedUrl(sharedUrl);
+        }
+    } else {
+        const view = PATH_TO_VIEW[location.pathname] || "meal-plans";
+        navigateToView(view, false);
+        history.replaceState({ view }, "", location.pathname === "/" ? "/calendar" : location.pathname);
+    }
 })();
 
 // ═══════════════════════════════════
@@ -2890,3 +2923,10 @@ function formatDates(dates) {
 }
 
 // Initial load is handled by initRouting() in the Navigation section
+
+// ═══════════════════════════════════
+// PWA Service Worker Registration
+// ═══════════════════════════════════
+if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+}
