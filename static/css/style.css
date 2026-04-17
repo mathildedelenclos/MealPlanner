@@ -2641,6 +2641,24 @@ li.category-hidden {
 }
 
 /* ───────────────────────────────────
+   Settings Logout (mobile only)
+   ─────────────────────────────────── */
+.settings-logout {
+    display: none;
+}
+
+@media (max-width: 600px) {
+    .settings-logout {
+        display: block;
+        margin-top: 24px;
+        width: 100%;
+        color: var(--danger);
+        border: 1px solid var(--danger);
+        text-align: center;
+    }
+}
+
+/* ───────────────────────────────────
    Mobile Optimisations
    ─────────────────────────────────── */
 

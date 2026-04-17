@@ -174,11 +174,13 @@ function _autoImportSharedUrl(url) {
         }
     } catch (_) { /* will redirect on 401 via global fetch */ }
 
-    // Logout button
-    document.getElementById("btn-logout").addEventListener("click", async () => {
+    // Logout buttons (sidebar + settings page)
+    const logoutHandler = async () => {
         await fetch("/auth/logout", { method: "POST" });
         window.location = "/login";
-    });
+    };
+    document.getElementById("btn-logout").addEventListener("click", logoutHandler);
+    document.getElementById("btn-logout-settings").addEventListener("click", logoutHandler);
 
     // Load settings before first render so calendar uses correct week start
     await loadSettings();
