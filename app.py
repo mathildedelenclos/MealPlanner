@@ -25,6 +25,7 @@ load_dotenv()
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key")
+app.permanent_session_lifetime = timedelta(days=365)
 
 # ──────────────────────────────────────
 # OAuth Providers
@@ -195,6 +196,7 @@ def auth_callback():
     )
     # Adopt orphan data (pre-auth rows) on first-ever login
     models.adopt_orphan_data(user["id"])
+    session.permanent = True
     session["user_id"] = user["id"]
     session["user_name"] = user.get("name", "")
     session["user_picture"] = user.get("picture", "")
@@ -226,6 +228,7 @@ def auth_facebook_callback():
         picture=picture,
     )
     models.adopt_orphan_data(user["id"])
+    session.permanent = True
     session["user_id"] = user["id"]
     session["user_name"] = user.get("name", "")
     session["user_picture"] = user.get("picture", "")
