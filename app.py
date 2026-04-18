@@ -931,10 +931,21 @@ def _gcal_sync_update(user_id, entry_id, entry_date=None, meal_type=None, title=
 
 
 def _gcal_sync_delete(user_id, entry_id):
-    """Delete a Google Calendar event."""
+    """Delete a Google Calendar event by looking up the entry's event ID."""
     service = _get_gcal_service(user_id)
     event_id = models.get_google_event_id(entry_id)
     if not service or not event_id:
+        return
+    try:
+        service.events().delete(calendarId="primary", eventId=event_id).execute()
+    except Exception:
+        pass
+
+
+def _gcal_delete_event(user_id, event_id):
+    """Delete a Google Calendar event by event ID directly."""
+    service = _get_gcal_service(user_id)
+    if not service:
         return
     try:
         service.events().delete(calendarId="primary", eventId=event_id).execute()
@@ -988,8 +999,10 @@ def api_add_calendar_entry():
 @login_required_api
 def api_remove_calendar_entry(entry_id):
     uid = session["user_id"]
-    threading.Thread(target=_gcal_sync_delete, args=(uid, entry_id)).start()
+    event_id = models.get_google_event_id(entry_id)
     models.remove_calendar_entry(uid, entry_id)
+    if event_id:
+        threading.Thread(target=_gcal_delete_event, args=(uid, event_id)).start()
     return jsonify({"ok": True})
 
 
