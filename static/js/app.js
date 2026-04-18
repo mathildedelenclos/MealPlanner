@@ -347,6 +347,11 @@ $("#recipe-sort").addEventListener("change", (e) => {
     loadRecipes();
 });
 
+const RECIPE_PAGE_SIZE = 20;
+let _filteredRecipes = [];
+let _renderedCount = 0;
+let _recipesLoading = false;
+
 async function loadRecipes() {
     const [recipesRes, catsRes] = await Promise.all([
         fetch(`${API}/api/recipes`),
@@ -417,15 +422,28 @@ async function loadRecipes() {
                     ? t("recipes.emptyCategory")
                     : t("recipes.emptyDefault");
         container.innerHTML = `<div class="empty-state"><span class="emoji">📖</span>${msg}</div>`;
+        _filteredRecipes = [];
+        _renderedCount = 0;
         return;
     }
 
+    _filteredRecipes = filtered;
+    _renderedCount = 0;
+
     const isList = recipeViewMode === "list";
     container.className = isList ? "recipes-list" : "recipes-grid";
+    container.innerHTML = "";
 
-    container.innerHTML = filtered
-        .map(
-            (r) => isList ? `
+    _renderRecipeBatch();
+}
+
+function _renderRecipeBatch() {
+    const container = $("#recipes-list");
+    const isList = recipeViewMode === "list";
+    const batch = _filteredRecipes.slice(_renderedCount, _renderedCount + RECIPE_PAGE_SIZE);
+    if (batch.length === 0) return;
+
+    const html = batch.map((r) => isList ? `
         <div class="recipe-row${selectedRecipeIds.has(r.id) ? " selected" : ""}" data-id="${r.id}">
             <input type="checkbox" class="recipe-select-cb" ${selectedRecipeIds.has(r.id) ? "checked" : ""}>
             ${r.image_url
@@ -440,11 +458,9 @@ async function loadRecipes() {
         </div>` : `
         <div class="recipe-card" data-id="${r.id}">
             <button class="btn-favourite${r.is_favourite ? " is-favourite" : ""}" data-id="${r.id}" title="${t("favourites.toggle")}">${r.is_favourite ? "❤️" : "🤍"}</button>
-            ${
-                r.image_url
-                    ? `<img class="recipe-card-img" src="${r.image_url}" alt="${r.title}">`
-                    : `<div class="recipe-card-img placeholder">🍳</div>`
-            }
+            ${r.image_url
+                ? `<img class="recipe-card-img" src="${r.image_url}" alt="${r.title}">`
+                : `<div class="recipe-card-img placeholder">🍳</div>`}
             <div class="recipe-card-body">
                 <h3>${escHtml(r.title)}</h3>
                 <span class="meta">${r.total_time || ""} ${r.servings ? "· " + r.servings : ""}</span>
@@ -453,10 +469,14 @@ async function loadRecipes() {
                     : ""}
             </div>
         </div>`
-        )
-        .join("");
+    ).join("");
 
-    container.querySelectorAll(".recipe-card, .recipe-row").forEach((card) => {
+    container.insertAdjacentHTML("beforeend", html);
+
+    // Bind events only on newly added cards
+    const allCards = container.querySelectorAll(".recipe-card, .recipe-row");
+    const newCards = Array.from(allCards).slice(_renderedCount);
+    newCards.forEach((card) => {
         const cb = card.querySelector(".recipe-select-cb");
         if (cb) {
             cb.addEventListener("click", (e) => {
@@ -485,7 +505,19 @@ async function loadRecipes() {
             openRecipeModal(card.dataset.id);
         });
     });
+
+    _renderedCount += batch.length;
 }
+
+// Infinite scroll for recipes
+window.addEventListener("scroll", () => {
+    if (_recipesLoading || _renderedCount >= _filteredRecipes.length) return;
+    if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 300) {
+        _recipesLoading = true;
+        _renderRecipeBatch();
+        _recipesLoading = false;
+    }
+});
 
 async function toggleFavourite(recipeId, btn) {
     const res = await fetch(`${API}/api/recipes/${recipeId}/favourite`, { method: "POST" });
