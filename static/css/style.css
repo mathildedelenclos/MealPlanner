@@ -379,6 +379,10 @@ body {
     font-size: 12px;
     text-transform: uppercase;
     color: var(--text-muted);
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 .copy-target {
     font-size: 12px !important;
@@ -2745,8 +2749,15 @@ li.category-hidden {
 
     /* ── Copy-to grid ── */
     .copy-grid {
-        grid-template-columns: repeat(4, 1fr);
-        gap: 6px;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 4px;
+    }
+    .copy-target {
+        font-size: 11px !important;
+        padding: 6px 2px !important;
+    }
+    .copy-day strong {
+        font-size: 10px;
     }
 
     /* ── Chat ── */
@@ -2843,7 +2854,8 @@ li.category-hidden {
     .content { padding: 10px; }
     .view-header h2 { font-size: 18px; }
     .card { padding: 16px; }
-    .copy-grid { grid-template-columns: repeat(3, 1fr); }
+    .copy-grid { grid-template-columns: repeat(7, 1fr); gap: 3px; }
+    .copy-target { font-size: 10px !important; padding: 5px 1px !important; }
     .cal-cell { min-height: 58px; }
     .cal-entry { font-size: 8px; }
 }
