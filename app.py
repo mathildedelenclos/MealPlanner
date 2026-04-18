@@ -14,6 +14,10 @@ from recipe_scrapers import scrape_html
 from google import genai
 from authlib.integrations.flask_client import OAuth
 
+from datetime import datetime, timedelta
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+
 import models
 
 load_dotenv()
@@ -32,7 +36,9 @@ oauth.register(
     client_id=os.getenv("GOOGLE_CLIENT_ID"),
     client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
     server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
-    client_kwargs={"scope": "openid email profile"},
+    client_kwargs={
+        "scope": "openid email profile https://www.googleapis.com/auth/calendar.events",
+    },
 )
 
 if os.getenv("FACEBOOK_CLIENT_ID"):
@@ -165,7 +171,9 @@ def auth_google():
         redirect_uri = base_url.rstrip("/") + "/auth/callback"
     else:
         redirect_uri = url_for("auth_callback", _external=True)
-    return oauth.google.authorize_redirect(redirect_uri)
+    return oauth.google.authorize_redirect(
+        redirect_uri, access_type="offline", prompt="consent"
+    )
 
 
 @app.route("/auth/callback")
@@ -177,6 +185,13 @@ def auth_callback():
         email=userinfo.get("email", ""),
         name=userinfo.get("name"),
         picture=userinfo.get("picture"),
+    )
+    # Store Google tokens for Calendar API access
+    models.update_google_tokens(
+        user["id"],
+        access_token=token.get("access_token"),
+        refresh_token=token.get("refresh_token"),
+        expires_at=token.get("expires_at"),
     )
     # Adopt orphan data (pre-auth rows) on first-ever login
     models.adopt_orphan_data(user["id"])
@@ -839,6 +854,92 @@ def api_get_categories():
 
 
 # ──────────────────────────────────────
+# Google Calendar Sync Helpers
+# ──────────────────────────────────────
+
+def _get_gcal_service(user_id):
+    """Build a Google Calendar API service for the user, or return None."""
+    # Check if user has sync enabled
+    if models.get_setting(user_id, "gcal_sync", "off") != "on":
+        return None
+    access_token, refresh_token, expiry = models.get_google_tokens(user_id)
+    if not access_token:
+        return None
+    try:
+        creds = Credentials(
+            token=access_token,
+            refresh_token=refresh_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=os.getenv("GOOGLE_CLIENT_ID"),
+            client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+        )
+        if expiry:
+            creds.expiry = datetime.utcfromtimestamp(float(expiry))
+        if creds.expired and creds.refresh_token:
+            from google.auth.transport.requests import Request
+            creds.refresh(Request())
+            models.update_google_tokens(
+                user_id,
+                access_token=creds.token,
+                refresh_token=creds.refresh_token,
+                expires_at=creds.expiry.timestamp() if creds.expiry else None,
+            )
+        return build("calendar", "v3", credentials=creds)
+    except Exception:
+        return None
+
+
+def _gcal_sync_create(user_id, entry_id, entry_date, meal_type, title):
+    """Create a Google Calendar event for a calendar entry."""
+    service = _get_gcal_service(user_id)
+    if not service or not title:
+        return
+    try:
+        start_hour = "12:00" if meal_type == "lunch" else "19:00"
+        end_hour = "13:00" if meal_type == "lunch" else "20:00"
+        event = service.events().insert(calendarId="primary", body={
+            "summary": f"🍽️ {title}",
+            "start": {"dateTime": f"{entry_date}T{start_hour}:00", "timeZone": "Europe/London"},
+            "end": {"dateTime": f"{entry_date}T{end_hour}:00", "timeZone": "Europe/London"},
+        }).execute()
+        models.set_google_event_id(entry_id, event["id"])
+    except Exception:
+        pass
+
+
+def _gcal_sync_update(user_id, entry_id, entry_date=None, meal_type=None, title=None):
+    """Update an existing Google Calendar event."""
+    service = _get_gcal_service(user_id)
+    event_id = models.get_google_event_id(entry_id)
+    if not service or not event_id:
+        return
+    try:
+        event = service.events().get(calendarId="primary", eventId=event_id).execute()
+        if title:
+            event["summary"] = f"🍽️ {title}"
+        if entry_date and meal_type:
+            start_hour = "12:00" if meal_type == "lunch" else "19:00"
+            end_hour = "13:00" if meal_type == "lunch" else "20:00"
+            event["start"] = {"dateTime": f"{entry_date}T{start_hour}:00", "timeZone": "Europe/London"}
+            event["end"] = {"dateTime": f"{entry_date}T{end_hour}:00", "timeZone": "Europe/London"}
+        service.events().update(calendarId="primary", eventId=event_id, body=event).execute()
+    except Exception:
+        pass
+
+
+def _gcal_sync_delete(user_id, entry_id):
+    """Delete a Google Calendar event."""
+    service = _get_gcal_service(user_id)
+    event_id = models.get_google_event_id(entry_id)
+    if not service or not event_id:
+        return
+    try:
+        service.events().delete(calendarId="primary", eventId=event_id).execute()
+    except Exception:
+        pass
+
+
+# ──────────────────────────────────────
 # Calendar API
 # ──────────────────────────────────────
 
@@ -869,13 +970,23 @@ def api_add_calendar_entry():
     entry_id = models.add_calendar_entry(session["user_id"], entry_date, meal_type,
                                          recipe_id=recipe_id, note=note,
                                          servings=servings)
+    # Sync to Google Calendar
+    title = note
+    if recipe_id:
+        recipe = models.get_recipe(session["user_id"], recipe_id)
+        title = recipe["title"] if recipe else None
+    if title:
+        uid = session["user_id"]
+        threading.Thread(target=_gcal_sync_create, args=(uid, entry_id, entry_date, meal_type, title)).start()
     return jsonify({"id": entry_id}), 201
 
 
 @app.route("/api/calendar/entries/<int:entry_id>", methods=["DELETE"])
 @login_required_api
 def api_remove_calendar_entry(entry_id):
-    models.remove_calendar_entry(session["user_id"], entry_id)
+    uid = session["user_id"]
+    threading.Thread(target=_gcal_sync_delete, args=(uid, entry_id)).start()
+    models.remove_calendar_entry(uid, entry_id)
     return jsonify({"ok": True})
 
 
@@ -887,7 +998,9 @@ def api_move_calendar_entry(entry_id):
     meal_type = data.get("meal_type", "").lower()
     if not entry_date or not meal_type:
         return jsonify({"error": "entry_date and meal_type are required"}), 400
-    models.move_calendar_entry(session["user_id"], entry_id, entry_date, meal_type)
+    uid = session["user_id"]
+    models.move_calendar_entry(uid, entry_id, entry_date, meal_type)
+    threading.Thread(target=_gcal_sync_update, args=(uid, entry_id, entry_date, meal_type)).start()
     return jsonify({"ok": True})
 
 
@@ -921,9 +1034,16 @@ def api_copy_calendar_entry(entry_id):
     meal_type = data.get("meal_type", "").lower()
     if not entry_date or not meal_type:
         return jsonify({"error": "entry_date and meal_type are required"}), 400
-    new_id = models.copy_calendar_entry(session["user_id"], entry_id, entry_date, meal_type)
+    uid = session["user_id"]
+    new_id = models.copy_calendar_entry(uid, entry_id, entry_date, meal_type)
     if new_id is None:
         return jsonify({"error": "Entry not found"}), 404
+    # Sync copy to Google Calendar
+    entry = models.get_entry_by_id(uid, new_id)
+    if entry:
+        title = entry.get("recipe_title") or entry.get("note")
+        if title:
+            threading.Thread(target=_gcal_sync_create, args=(uid, new_id, entry_date, meal_type, title)).start()
     return jsonify({"id": new_id}), 201
 
 
@@ -1008,7 +1128,6 @@ def api_fix_instructions():
 @login_required_api
 def api_generate_meal_plan():
     """Take an AI-generated meal_plan object, save all recipes, create calendar entries."""
-    from datetime import datetime, timedelta
     data = request.get_json(force=True)
     entries = data.get("entries", [])
     if not entries:
@@ -1053,7 +1172,8 @@ def api_generate_meal_plan():
                 servings_num = int(m.group(1))
         except Exception:
             pass
-        models.add_calendar_entry(user_id, day, meal, recipe_id=recipe_id, servings=servings_num)
+        eid = models.add_calendar_entry(user_id, day, meal, recipe_id=recipe_id, servings=servings_num)
+        threading.Thread(target=_gcal_sync_create, args=(user_id, eid, day, meal, title)).start()
         saved.append({"title": title, "day": day, "meal": meal})
 
     return jsonify({"entries_created": len(saved), "saved": saved}), 201

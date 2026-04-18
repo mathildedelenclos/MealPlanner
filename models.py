@@ -236,6 +236,34 @@ def init_db():
             conn.execute("PRAGMA foreign_keys = ON")
     except Exception:
         conn.execute("PRAGMA foreign_keys = ON")
+    # Migration: fix settings table FK if it references users_old
+    try:
+        fk_list = conn.execute("PRAGMA foreign_key_list(settings)").fetchall()
+        if any(row[2] == "users_old" for row in fk_list):
+            conn.execute("PRAGMA foreign_keys = OFF")
+            conn.execute("""CREATE TABLE settings_new (
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                PRIMARY KEY (user_id, key)
+            )""")
+            conn.execute("INSERT INTO settings_new SELECT user_id, key, value FROM settings")
+            conn.execute("DROP TABLE settings")
+            conn.execute("ALTER TABLE settings_new RENAME TO settings")
+            conn.execute("PRAGMA foreign_keys = ON")
+    except Exception:
+        conn.execute("PRAGMA foreign_keys = ON")
+    # Migration: add Google Calendar sync columns
+    for stmt in (
+        "ALTER TABLE users ADD COLUMN google_access_token TEXT",
+        "ALTER TABLE users ADD COLUMN google_refresh_token TEXT",
+        "ALTER TABLE users ADD COLUMN google_token_expiry TEXT",
+        "ALTER TABLE calendar_entries ADD COLUMN google_event_id TEXT",
+    ):
+        try:
+            conn.execute(stmt)
+        except Exception:
+            pass
     conn.commit()
     conn.close()
 
@@ -300,6 +328,63 @@ def get_or_create_user_facebook(facebook_id, email, name=None, picture=None):
 def get_user_by_id(user_id):
     conn = get_db()
     row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def update_google_tokens(user_id, access_token, refresh_token=None, expires_at=None):
+    """Store or update Google OAuth tokens for Calendar API access."""
+    conn = get_db()
+    if refresh_token:
+        conn.execute(
+            "UPDATE users SET google_access_token = ?, google_refresh_token = ?, google_token_expiry = ? WHERE id = ?",
+            (access_token, refresh_token, str(expires_at) if expires_at else None, user_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE users SET google_access_token = ?, google_token_expiry = ? WHERE id = ?",
+            (access_token, str(expires_at) if expires_at else None, user_id),
+        )
+    conn.commit()
+    conn.close()
+
+
+def get_google_tokens(user_id):
+    """Return (access_token, refresh_token, expiry) tuple or (None, None, None)."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT google_access_token, google_refresh_token, google_token_expiry FROM users WHERE id = ?",
+        (user_id,),
+    ).fetchone()
+    conn.close()
+    if row and row["google_access_token"]:
+        return row["google_access_token"], row["google_refresh_token"], row["google_token_expiry"]
+    return None, None, None
+
+
+def set_google_event_id(entry_id, event_id):
+    conn = get_db()
+    conn.execute("UPDATE calendar_entries SET google_event_id = ? WHERE id = ?", (event_id, entry_id))
+    conn.commit()
+    conn.close()
+
+
+def get_google_event_id(entry_id):
+    conn = get_db()
+    row = conn.execute("SELECT google_event_id FROM calendar_entries WHERE id = ?", (entry_id,)).fetchone()
+    conn.close()
+    return row["google_event_id"] if row else None
+
+
+def get_entry_by_id(user_id, entry_id):
+    """Return a single calendar entry with recipe title."""
+    conn = get_db()
+    row = conn.execute("""
+        SELECT ce.*, r.title as recipe_title
+        FROM calendar_entries ce
+        LEFT JOIN recipes r ON r.id = ce.recipe_id
+        WHERE ce.id = ? AND ce.user_id = ?
+    """, (entry_id, user_id)).fetchone()
     conn.close()
     return dict(row) if row else None
 
