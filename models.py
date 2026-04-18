@@ -218,7 +218,7 @@ def init_db():
     # Migration: remove ON DELETE CASCADE from calendar_entries
     try:
         fk_list = conn.execute("PRAGMA foreign_key_list(calendar_entries)").fetchall()
-        if any(row[7] == "CASCADE" for row in fk_list):
+        if any(row[6] == "CASCADE" for row in fk_list):
             conn.execute("PRAGMA foreign_keys = OFF")
             conn.execute("""CREATE TABLE calendar_entries_new (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
