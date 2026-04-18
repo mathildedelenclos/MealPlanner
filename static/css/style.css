@@ -1772,6 +1772,7 @@ li.category-hidden {
 .cooking-step-text {
     font-size: 18px;
     line-height: 1.6;
+    white-space: pre-line;
 }
 
 /* Start cooking button in recipe modal */

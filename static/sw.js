@@ -1,5 +1,5 @@
 // Service Worker – Meal Planner PWA
-const CACHE_NAME = "meal-planner-v2";
+const CACHE_NAME = "meal-planner-v3";
 const PRECACHE = [
     "/static/css/style.css",
     "/static/js/app.js",
@@ -26,26 +26,25 @@ self.addEventListener("activate", (e) => {
     self.clients.claim();
 });
 
-// Fetch: network-first for API & pages, cache-first for static assets
+// Fetch: network-first for everything, fall back to cache for offline support
 self.addEventListener("fetch", (e) => {
-    const url = new URL(e.request.url);
-
     // Skip non-GET requests
     if (e.request.method !== "GET") return;
 
-    // API calls and HTML pages: always go to network
+    // API calls and HTML pages: let the browser handle normally
+    const url = new URL(e.request.url);
     if (url.pathname.startsWith("/api/") || e.request.mode === "navigate") {
         return;
     }
 
-    // Static assets: cache-first
+    // Static assets: network-first, fall back to cache
     if (url.pathname.startsWith("/static/")) {
         e.respondWith(
-            caches.match(e.request).then((cached) => cached || fetch(e.request).then((res) => {
+            fetch(e.request).then((res) => {
                 const clone = res.clone();
                 caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
                 return res;
-            }))
+            }).catch(() => caches.match(e.request))
         );
     }
 });
