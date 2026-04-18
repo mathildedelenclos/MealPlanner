@@ -933,6 +933,89 @@ body {
 .modal-actions { display: flex; gap: 10px; margin-top: 8px; }
 
 /* ───────────────────────────────────
+   AI Modify Recipe
+   ─────────────────────────────────── */
+.ai-modify-toggle {
+    color: var(--primary);
+    font-weight: 600;
+}
+
+.ai-modify-panel {
+    margin-top: 12px;
+    margin-bottom: 8px;
+}
+
+.ai-modify-chips {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.ai-chip {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all .15s;
+}
+
+.ai-chip:hover {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+}
+
+.ai-modify-custom {
+    display: flex;
+    gap: 8px;
+}
+
+.ai-modify-custom .input {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+.ai-modify-result {
+    margin-top: 16px;
+    padding: 16px;
+    background: var(--bg);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+}
+
+.ai-modify-result-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+
+.ai-modify-result h5 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--text-muted);
+    margin: 12px 0 4px;
+}
+
+.ai-modify-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.ai-modify-loading {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.ai-modify-error {
+    color: var(--danger);
+}
+
+/* ───────────────────────────────────
    Import / URL Scraper
    ─────────────────────────────────── */
 .import-card { max-width: 600px; }

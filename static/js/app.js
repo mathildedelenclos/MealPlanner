@@ -607,7 +607,20 @@ async function openRecipeModal(id, entryId, plannedServings) {
         <p class="modal-recipe-meta">${r.total_time || ""} ${servingsLabel} ${r.source_url ? `· <a href="${r.source_url}" target="_blank">${t("recipes.source")}</a>` : ""}</p>
         <div class="modal-actions">
             ${cookBtn}
+            <button class="btn btn-ghost btn-small ai-modify-toggle" id="btn-ai-modify-toggle">✨ ${t("recipes.modifyWithAI")}</button>
             ${actionBtn}
+        </div>
+        <div class="ai-modify-panel hidden" id="ai-modify-panel">
+            <div class="ai-modify-chips">
+                <button class="btn btn-small ai-chip" data-mod="healthier">${t("recipes.chipHealthier")}</button>
+                <button class="btn btn-small ai-chip" data-mod="kid-friendly">${t("recipes.chipKidFriendly")}</button>
+                <button class="btn btn-small ai-chip" data-mod="quicker">${t("recipes.chipQuicker")}</button>
+            </div>
+            <div class="ai-modify-custom">
+                <input type="text" class="input" id="ai-modify-input" placeholder="${t("recipes.modifyPlaceholder")}">
+                <button class="btn btn-primary btn-small" id="btn-ai-modify-send">${t("recipes.modifySend")}</button>
+            </div>
+            <div class="ai-modify-result hidden" id="ai-modify-result"></div>
         </div>
         ${(r.categories || []).length > 0
             ? `<div class="modal-recipe-cats">${r.categories.map((c) => `<span class="cat-pill">${escHtml(c)}</span>`).join("")}</div>`
@@ -648,6 +661,98 @@ async function openRecipeModal(id, entryId, plannedServings) {
             showEditRecipeForm(r);
         });
     }
+
+    // AI Modify toggle
+    const aiToggle = body.querySelector("#btn-ai-modify-toggle");
+    const aiPanel = body.querySelector("#ai-modify-panel");
+    aiToggle.addEventListener("click", () => {
+        aiPanel.classList.toggle("hidden");
+    });
+
+    // AI Modify handler
+    async function sendModifyRequest(modification) {
+        const resultDiv = body.querySelector("#ai-modify-result");
+        resultDiv.innerHTML = `<p class="ai-modify-loading">${t("recipes.modifyLoading")}</p>`;
+        show(resultDiv);
+
+        try {
+            const resp = await fetch(`${API}/api/modify-recipe`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ recipe: r, modification }),
+            });
+            const data = await resp.json();
+            if (data.error) throw new Error(data.error);
+            const mod = data.recipe;
+            resultDiv.innerHTML = `
+                <h4 class="ai-modify-result-title">${escHtml(mod.title)}</h4>
+                <h5>${t("recipes.ingredients")}</h5>
+                <ul class="ingredient-list">${mod.ingredients.map(i => `<li>${escHtml(i)}</li>`).join("")}</ul>
+                <h5>${t("recipes.method")}</h5>
+                <ol class="instruction-list">${mod.instructions.map(s => `<li>${escHtml(s)}</li>`).join("")}</ol>
+                <div class="ai-modify-actions">
+                    <button class="btn btn-primary btn-small" id="btn-ai-save-new">${t("recipes.saveAsNew")}</button>
+                    <button class="btn btn-secondary btn-small" id="btn-ai-replace">${t("recipes.replaceOriginal")}</button>
+                </div>`;
+
+            body.querySelector("#btn-ai-save-new").addEventListener("click", async () => {
+                await fetch(`${API}/api/recipes`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        title: mod.title,
+                        ingredients: mod.ingredients,
+                        instructions: mod.instructions,
+                        total_time: mod.total_time || r.total_time || "",
+                        servings: mod.servings || r.servings || "",
+                        categories: mod.categories || r.categories || [],
+                        source_url: r.source_url || "",
+                        image_url: r.image_url || "",
+                    }),
+                });
+                hide($("#recipe-modal"));
+                loadRecipes();
+            });
+
+            body.querySelector("#btn-ai-replace").addEventListener("click", async () => {
+                await fetch(`${API}/api/recipes/${r.id}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        title: mod.title,
+                        ingredients: mod.ingredients,
+                        instructions: mod.instructions,
+                        total_time: mod.total_time || r.total_time || "",
+                        servings: mod.servings || r.servings || "",
+                        categories: mod.categories || r.categories || [],
+                        source_url: r.source_url || "",
+                        image_url: r.image_url || "",
+                    }),
+                });
+                hide($("#recipe-modal"));
+                loadRecipes();
+            });
+        } catch (err) {
+            resultDiv.innerHTML = `<p class="ai-modify-error">${t("recipes.modifyError")}</p>`;
+        }
+    }
+
+    // Chip clicks
+    body.querySelectorAll(".ai-chip").forEach(chip => {
+        chip.addEventListener("click", () => sendModifyRequest(chip.dataset.mod));
+    });
+
+    // Custom input
+    body.querySelector("#btn-ai-modify-send").addEventListener("click", () => {
+        const val = body.querySelector("#ai-modify-input").value.trim();
+        if (val) sendModifyRequest(val);
+    });
+    body.querySelector("#ai-modify-input").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            const val = e.target.value.trim();
+            if (val) sendModifyRequest(val);
+        }
+    });
 
     show($("#recipe-modal"));
 }

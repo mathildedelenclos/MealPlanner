@@ -1059,6 +1059,70 @@ def api_generate_meal_plan():
     return jsonify({"entries_created": len(saved), "saved": saved}), 201
 
 
+@app.route("/api/modify-recipe", methods=["POST"])
+@login_required_api
+def api_modify_recipe():
+    """Ask AI to modify an existing recipe based on a user request."""
+    client = _get_gemini()
+    if client is None:
+        return jsonify({"error": "Gemini API key not configured."}), 503
+
+    data = request.get_json(force=True)
+    recipe = data.get("recipe", {})
+    modification = data.get("modification", "")
+
+    if not recipe or not modification:
+        return jsonify({"error": "Missing recipe or modification."}), 400
+
+    prompt = (
+        f"Here is a recipe:\n"
+        f"Title: {recipe.get('title', '')}\n"
+        f"Ingredients: {json.dumps(recipe.get('ingredients', []))}\n"
+        f"Instructions: {json.dumps(recipe.get('instructions', []))}\n"
+        f"Total time: {recipe.get('total_time', 'N/A')}\n"
+        f"Servings: {recipe.get('servings', 'N/A')}\n\n"
+        f"Please modify this recipe to make it: {modification}\n\n"
+        "Keep the same general dish but adapt the ingredients and instructions as needed. "
+        "Return ONLY a JSON object (no markdown) with this structure: "
+        '{"recipe": {"title": "...", "ingredients": ["..."], "instructions": ["..."], '
+        '"total_time": "...", "servings": "...", "categories": ["..."]}}'
+    )
+
+    system = (
+        "You are a creative chef who adapts recipes. Always use METRIC measurements "
+        "(grams, kilograms, millilitres, litres, Celsius). "
+        "Return only valid JSON, no markdown fences."
+    )
+    lang = models.get_setting(session["user_id"], "language", "en")
+    if lang == "fr":
+        system += (
+            " The user speaks French. Recipe title, ingredients, and instructions should be in French. "
+            "JSON keys must remain in English."
+        )
+
+    try:
+        response = client.models.generate_content(
+            model="gemini-3-flash-preview",
+            contents=[{"role": "user", "parts": [{"text": prompt}]}],
+            config={
+                "system_instruction": system,
+                "temperature": 0.8,
+                "max_output_tokens": 3000,
+            },
+        )
+        raw = "".join(
+            p.text for p in response.candidates[0].content.parts
+            if hasattr(p, "text") and p.text
+        ).strip()
+        if raw.startswith("```"):
+            raw = re.sub(r"^```(?:json)?\s*", "", raw)
+            raw = re.sub(r"\s*```$", "", raw)
+        parsed = json.loads(raw)
+        return jsonify(parsed)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
 @app.route("/api/regenerate-recipe", methods=["POST"])
 @login_required_api
 def api_regenerate_recipe():
