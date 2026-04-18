@@ -643,7 +643,7 @@ async function openRecipeModal(id, entryId, plannedServings) {
     if (cookingBtn) {
         cookingBtn.addEventListener("click", () => {
             hide($("#recipe-modal"));
-            showPrecookScreen(r);
+            showPrecookScreen(r, plannedServings);
         });
     }
 
@@ -2683,9 +2683,11 @@ function formatTimeHHMM(date) {
 
 // ── Pre-cook screen ──
 let pendingCookRecipe = null;
+let pendingCookServings = null;
 
-function showPrecookScreen(recipe) {
+function showPrecookScreen(recipe, plannedServings) {
     pendingCookRecipe = recipe;
+    pendingCookServings = plannedServings || null;
     cookingStartTimeStr = null;
 
     $("#precook-title").textContent = recipe.title;
@@ -2759,17 +2761,19 @@ $("#precook-time-input").addEventListener("input", updatePrecookResult);
 $("#precook-go").addEventListener("click", () => {
     if (!pendingCookRecipe) return;
     hide($("#precook-screen"));
-    enterCookingMode(pendingCookRecipe);
+    enterCookingMode(pendingCookRecipe, pendingCookServings);
     pendingCookRecipe = null;
+    pendingCookServings = null;
 });
 
 $("#precook-cancel").addEventListener("click", () => {
     hide($("#precook-screen"));
     pendingCookRecipe = null;
+    pendingCookServings = null;
     cookingStartTimeStr = null;
 });
 
-function enterCookingMode(recipe) {
+function enterCookingMode(recipe, plannedServings) {
     if (!recipe || !recipe.instructions || recipe.instructions.length === 0) {
         alert(t("cooking.noSteps"));
         return;
@@ -2780,8 +2784,23 @@ function enterCookingMode(recipe) {
 
     $("#cooking-title").textContent = recipe.title;
 
+    const recipeServings = parseServings(recipe.servings);
+    const ratio = (recipeServings && plannedServings && recipeServings !== plannedServings)
+        ? plannedServings / recipeServings : null;
+    const ingredients = ratio
+        ? (recipe.ingredients || []).map(i => scaleIngredient(i, ratio))
+        : (recipe.ingredients || []);
+
+    const displayServings = plannedServings || recipeServings || null;
+    const panelHeader = $("#cooking-ingredients-panel").querySelector("h3");
+    if (displayServings) {
+        panelHeader.textContent = t("cooking.ingredientsServings", { count: displayServings });
+    } else {
+        panelHeader.textContent = t("cooking.ingredients");
+    }
+
     const ingList = $("#cooking-ingredients-list");
-    ingList.innerHTML = (recipe.ingredients || []).map(i =>
+    ingList.innerHTML = ingredients.map(i =>
         `<li>${escHtml(i)}</li>`
     ).join("");
     ingList.querySelectorAll("li").forEach(li => {

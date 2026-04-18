@@ -194,6 +194,7 @@ const TRANSLATIONS = {
     // Cooking mode
     "cooking.exit": "Exit",
     "cooking.ingredients": "Ingredients",
+    "cooking.ingredientsServings": "Ingredients · {{count}} servings",
     "cooking.screenOn": "Screen On",
     "cooking.stepOf": "Step {{step}} of {{total}}",
     "cooking.previous": "\u2190 Previous",
@@ -414,6 +415,7 @@ const TRANSLATIONS = {
     // Cooking mode
     "cooking.exit": "Quitter",
     "cooking.ingredients": "Ingr\u00e9dients",
+    "cooking.ingredientsServings": "Ingr\u00e9dients · {{count}} portions",
     "cooking.screenOn": "\u00c9cran actif",
     "cooking.stepOf": "\u00c9tape {{step}} sur {{total}}",
     "cooking.previous": "\u2190 Pr\u00e9c\u00e9dent",
