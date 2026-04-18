@@ -2690,7 +2690,7 @@ function enterCookingMode(recipe) {
         startBanner.classList.remove("is-late");
     }
 
-    renderCookingStep();
+    renderCookingSteps();
 
     show($("#cooking-mode"));
     document.body.style.overflow = "hidden";
@@ -2698,8 +2698,6 @@ function enterCookingMode(recipe) {
     requestWakeLock();
 
     document.addEventListener("keydown", cookingKeyHandler);
-
-    setupCookingSwipe();
 }
 
 function exitCookingMode() {
@@ -2712,105 +2710,35 @@ function exitCookingMode() {
     releaseWakeLock();
 
     document.removeEventListener("keydown", cookingKeyHandler);
-
-    teardownCookingSwipe();
 }
 
-function renderCookingStep() {
+function renderCookingSteps() {
     if (!cookingRecipe) return;
-    const steps = cookingRecipe.instructions;
-    const total = steps.length;
-    const step = cookingStep;
+    const list = $("#cooking-steps-list");
+    list.innerHTML = cookingRecipe.instructions.map((text, i) =>
+        `<li class="cooking-step-item${i === 0 ? ' active' : ''}" data-step="${i}">` +
+        `<span class="cooking-step-number">${i + 1}</span>` +
+        `<span class="cooking-step-text">${escHtml(text)}</span></li>`
+    ).join("");
 
-    const pct = ((step + 1) / total) * 100;
-    $("#cooking-progress-bar").style.width = `${pct}%`;
-
-    $("#cooking-step-label").textContent = t("cooking.stepOf", { step: step + 1, total });
-
-    const textEl = $("#cooking-step-text");
-    textEl.textContent = steps[step];
-
-    $("#cooking-prev").disabled = step === 0;
-
-    if (step === total - 1) {
-        $("#cooking-next").textContent = "✅ " + t("cooking.done");
-        $("#cooking-next").classList.add("cooking-finish");
-    } else {
-        $("#cooking-next").textContent = t("cooking.next");
-        $("#cooking-next").classList.remove("cooking-finish");
-    }
-}
-
-function cookingGoNext() {
-    if (!cookingRecipe) return;
-    if (cookingStep >= cookingRecipe.instructions.length - 1) {
-        exitCookingMode();
-        return;
-    }
-    const textEl = $("#cooking-step-text");
-    textEl.classList.add("slide-out-left");
-    setTimeout(() => {
-        cookingStep++;
-        renderCookingStep();
-        textEl.classList.remove("slide-out-left");
-        textEl.classList.add("slide-in");
-        setTimeout(() => textEl.classList.remove("slide-in"), 200);
-    }, 150);
-}
-
-function cookingGoPrev() {
-    if (!cookingRecipe || cookingStep <= 0) return;
-    const textEl = $("#cooking-step-text");
-    textEl.classList.add("slide-out-right");
-    setTimeout(() => {
-        cookingStep--;
-        renderCookingStep();
-        textEl.classList.remove("slide-out-right");
-        textEl.classList.add("slide-in");
-        setTimeout(() => textEl.classList.remove("slide-in"), 200);
-    }, 150);
+    list.querySelectorAll(".cooking-step-item").forEach(li => {
+        li.addEventListener("click", () => {
+            const wasActive = li.classList.contains("active");
+            list.querySelectorAll(".cooking-step-item.active").forEach(el => el.classList.remove("active"));
+            if (!wasActive) {
+                li.classList.add("active");
+                cookingStep = parseInt(li.dataset.step);
+            } else {
+                cookingStep = -1;
+            }
+        });
+    });
 }
 
 function cookingKeyHandler(e) {
-    if (e.key === "ArrowRight" || e.key === " ") {
-        e.preventDefault();
-        cookingGoNext();
-    } else if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        cookingGoPrev();
-    } else if (e.key === "Escape") {
+    if (e.key === "Escape") {
         exitCookingMode();
     }
-}
-
-// Swipe support for touch devices
-let cookingTouchStartX = 0;
-let cookingTouchStartY = 0;
-
-function cookingTouchStart(e) {
-    cookingTouchStartX = e.touches[0].clientX;
-    cookingTouchStartY = e.touches[0].clientY;
-}
-
-function cookingTouchEnd(e) {
-    const dx = e.changedTouches[0].clientX - cookingTouchStartX;
-    const dy = e.changedTouches[0].clientY - cookingTouchStartY;
-    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) {
-        if (dx < 0) cookingGoNext();
-        else cookingGoPrev();
-    }
-}
-
-function setupCookingSwipe() {
-    const el = $("#cooking-mode");
-    el.addEventListener("touchstart", cookingTouchStart, { passive: true });
-    el.addEventListener("touchend", cookingTouchEnd, { passive: true });
-}
-
-function teardownCookingSwipe() {
-    const el = $("#cooking-mode");
-    el.removeEventListener("touchstart", cookingTouchStart);
-    el.removeEventListener("touchend", cookingTouchEnd);
 }
 
 // Screen Wake Lock API
@@ -2850,8 +2778,6 @@ function releaseWakeLock() {
 
 // Cooking mode button handlers
 $("#cooking-exit").addEventListener("click", exitCookingMode);
-$("#cooking-next").addEventListener("click", cookingGoNext);
-$("#cooking-prev").addEventListener("click", cookingGoPrev);
 $("#cooking-toggle-ingredients").addEventListener("click", () => {
     const panel = $("#cooking-ingredients-panel");
     const btn = $("#cooking-toggle-ingredients");

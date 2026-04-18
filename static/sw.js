@@ -1,5 +1,5 @@
 // Service Worker – Meal Planner PWA
-const CACHE_NAME = "meal-planner-v1";
+const CACHE_NAME = "meal-planner-v2";
 const PRECACHE = [
     "/static/css/style.css",
     "/static/js/app.js",
