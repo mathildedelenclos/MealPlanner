@@ -51,7 +51,7 @@ def init_db():
             servings INTEGER NOT NULL DEFAULT 2,
             user_id INTEGER REFERENCES users(id),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
+            FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE SET NULL
         );
 
         CREATE TABLE IF NOT EXISTS custom_shopping_items (
@@ -164,7 +164,7 @@ def init_db():
                     recipe_id INTEGER, note TEXT, servings INTEGER NOT NULL DEFAULT 2,
                     user_id INTEGER REFERENCES users(id),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
+                    FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE SET NULL
                 )""",
                 """INSERT INTO calendar_entries_new
                    SELECT id, entry_date, meal_type, recipe_id, note, servings, user_id, created_at
@@ -215,6 +215,27 @@ def init_db():
             conn.execute("DROP TABLE settings_old")
     except Exception:
         pass
+    # Migration: remove ON DELETE CASCADE from calendar_entries
+    try:
+        fk_list = conn.execute("PRAGMA foreign_key_list(calendar_entries)").fetchall()
+        if any(row[7] == "CASCADE" for row in fk_list):
+            conn.execute("PRAGMA foreign_keys = OFF")
+            conn.execute("""CREATE TABLE calendar_entries_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                entry_date TEXT NOT NULL, meal_type TEXT NOT NULL,
+                recipe_id INTEGER, note TEXT, servings INTEGER NOT NULL DEFAULT 2,
+                user_id INTEGER REFERENCES users(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE SET NULL
+            )""")
+            conn.execute("""INSERT INTO calendar_entries_new
+                SELECT id, entry_date, meal_type, recipe_id, note, servings, user_id, created_at
+                FROM calendar_entries""")
+            conn.execute("DROP TABLE calendar_entries")
+            conn.execute("ALTER TABLE calendar_entries_new RENAME TO calendar_entries")
+            conn.execute("PRAGMA foreign_keys = ON")
+    except Exception:
+        conn.execute("PRAGMA foreign_keys = ON")
     conn.commit()
     conn.close()
 

@@ -1199,6 +1199,12 @@ async function loadCalendarWeek() {
                                   data-note="${escHtml(e.note)}">
                         <span class="cal-entry-text">📝 ${escHtml(e.note)}</span>
                     </div>`;
+                } else if (!e.recipe_id) {
+                    html += `<div class="cal-entry cal-entry-deleted"
+                                  data-entry-id="${e.id}" data-entry-type="recipe">
+                        <span class="cal-entry-text">${t("calendar.deletedRecipe")}</span>
+                        <button class="remove-entry" data-entry-id="${e.id}">&times;</button>
+                    </div>`;
                 } else {
                     html += `<div class="cal-entry" draggable="true"
                                   data-entry-id="${e.id}" data-entry-type="recipe"
@@ -1296,6 +1302,12 @@ async function loadCalendarMonth() {
                                   data-entry-id="${e.id}" data-entry-type="note"
                                   data-note="${escHtml(e.note)}">
                         <span class="cal-entry-text">📝 ${escHtml(e.note)}</span>
+                    </div>`;
+                } else if (!e.recipe_id) {
+                    html += `<div class="cal-entry cal-entry-deleted"
+                                  data-entry-id="${e.id}" data-entry-type="recipe">
+                        <span class="cal-entry-text">${t("calendar.deletedRecipe")}</span>
+                        <button class="remove-entry" data-entry-id="${e.id}">&times;</button>
                     </div>`;
                 } else {
                     html += `<div class="cal-entry" draggable="true"
@@ -1495,6 +1507,15 @@ function bindCalendarEvents(grid) {
         entry.addEventListener("click", (ev) => {
             ev.stopPropagation();
             openEditNoteModal(parseInt(entry.dataset.entryId), entry.dataset.note || "");
+        });
+    });
+
+    // Bind deleted-entry remove buttons
+    grid.querySelectorAll(".cal-entry-deleted .remove-entry").forEach((btn) => {
+        btn.addEventListener("click", async (ev) => {
+            ev.stopPropagation();
+            await fetch(`${API}/api/calendar/entries/${btn.dataset.entryId}`, { method: "DELETE" });
+            loadCalendar();
         });
     });
 

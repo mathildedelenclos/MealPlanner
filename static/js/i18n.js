@@ -36,6 +36,7 @@ const TRANSLATIONS = {
     "calendar.howManyServings": "How many servings?",
     "calendar.notePlaceholder": "e.g. Leftovers, Eat out, Salad\u2026",
     "calendar.pleaseEnterNote": "Please enter a note.",
+    "calendar.deletedRecipe": "Deleted recipe",
 
     // Context menu
     "ctx.servings": "Servings",
@@ -245,6 +246,7 @@ const TRANSLATIONS = {
     "calendar.howManyServings": "Combien de portions\u00a0?",
     "calendar.notePlaceholder": "ex. Restes, Manger dehors, Salade\u2026",
     "calendar.pleaseEnterNote": "Veuillez saisir une note.",
+    "calendar.deletedRecipe": "Recette supprim\u00e9e",
 
     // Context menu
     "ctx.servings": "Portions",

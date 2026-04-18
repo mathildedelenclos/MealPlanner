@@ -2243,6 +2243,7 @@ li.category-hidden {
 }
 .cal-entry.dragging { opacity: 0.5; }
 .cal-entry-note { background: #fff8e1; }
+.cal-entry-deleted { background: #f1f5f9; opacity: .6; font-style: italic; }
 
 .cal-entry-link {
     color: var(--primary);
