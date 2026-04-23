@@ -184,7 +184,6 @@ const TRANSLATIONS = {
     "settings.language": "Language",
     "settings.langEnglish": "English",
     "settings.langFrench": "Fran\u00E7ais",
-    "settings.gcalSync": "Google Calendar sync",
 
     // Auth
     "auth.signInGoogle": "Sign in with Google",
@@ -406,7 +405,6 @@ const TRANSLATIONS = {
     "settings.language": "Langue",
     "settings.langEnglish": "English",
     "settings.langFrench": "Fran\u00e7ais",
-    "settings.gcalSync": "Synchronisation Google Calendar",
 
     // Auth
     "auth.signInGoogle": "Se connecter avec Google",

@@ -104,9 +104,6 @@ async function loadSettings() {
         if (data.language) {
             setLanguage(data.language);
         }
-        if (data.gcal_sync) {
-            window._gcalSync = data.gcal_sync;
-        }
     } catch (e) { /* use defaults */ }
 }
 
@@ -137,19 +134,6 @@ function initSettingsUI() {
             translatePage();
             const view = PATH_TO_VIEW[location.pathname] || "meal-plans";
             navigateToView(view, false);
-        });
-    }
-
-    const gcalToggle = $("#setting-gcal-sync");
-    if (gcalToggle) {
-        gcalToggle.checked = window._gcalSync === "on";
-        gcalToggle.addEventListener("change", async () => {
-            await fetch(`${API}/api/settings`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ gcal_sync: gcalToggle.checked ? "on" : "off" }),
-            });
-            window._gcalSync = gcalToggle.checked ? "on" : "off";
         });
     }
 
