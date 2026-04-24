@@ -444,6 +444,20 @@ def update_recipe_image(recipe_id, image_url):
     conn.close()
 
 
+def get_recipes_missing_images(user_id):
+    """Return (id, source_url) pairs for this user's recipes that have a source_url but no image_url."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, source_url FROM recipes "
+        "WHERE user_id = ? AND source_url IS NOT NULL AND source_url != '' "
+        "AND (image_url IS NULL OR image_url = '') "
+        "ORDER BY title",
+        (user_id,),
+    ).fetchall()
+    conn.close()
+    return [(r["id"], r["source_url"]) for r in rows]
+
+
 def toggle_favourite(user_id, recipe_id):
     conn = get_db()
     row = conn.execute("SELECT is_favourite FROM recipes WHERE id = ? AND user_id = ?", (recipe_id, user_id)).fetchone()

@@ -345,6 +345,33 @@ def api_toggle_favourite(recipe_id):
     return jsonify({"is_favourite": result})
 
 
+@app.route("/api/recipes/rescrape-missing-images", methods=["POST"])
+@login_required_api
+def api_rescrape_missing_images():
+    """Kick off a background scrape for any of the user's recipes that have a
+    source_url but no image_url (e.g. recipes whose initial import-thread
+    didn't finish because the process was restarted). Returns immediately
+    with the count queued; the scrape runs on a daemon thread with a 0.5s
+    delay between URLs."""
+    pairs = models.get_recipes_missing_images(session["user_id"])
+    if not pairs:
+        return jsonify({"queued": 0})
+
+    def _worker(items):
+        import time
+        for rid, url in items:
+            try:
+                img = _scrape_image_url(url)
+                if img:
+                    models.update_recipe_image(rid, img)
+                time.sleep(0.5)
+            except Exception:
+                pass
+
+    threading.Thread(target=_worker, args=(pairs,), daemon=True).start()
+    return jsonify({"queued": len(pairs)})
+
+
 # ──────────────────────────────────────
 # URL Recipe Scraper
 # ──────────────────────────────────────
