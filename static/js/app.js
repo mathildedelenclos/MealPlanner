@@ -940,6 +940,23 @@ async function showEditRecipeForm(recipe) {
 $("#btn-close-modal").addEventListener("click", () => hide($("#recipe-modal")));
 $(".modal-overlay").addEventListener("click", () => hide($("#recipe-modal")));
 
+// Global Escape handler — closes the topmost modal (cooking mode handles its own Escape)
+document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (!$("#cooking-mode").classList.contains("hidden")) return;
+    const dynamic = document.querySelectorAll("body > .add-meal-modal, body > .chat-recipe-modal, body > .modal");
+    if (dynamic.length) {
+        dynamic[dynamic.length - 1].remove();
+        e.preventDefault();
+        return;
+    }
+    const recipeModal = $("#recipe-modal");
+    if (recipeModal && !recipeModal.classList.contains("hidden")) {
+        hide(recipeModal);
+        e.preventDefault();
+    }
+});
+
 async function deleteRecipe(id) {
     if (!confirm(t("recipes.confirmDelete"))) return;
     await fetch(`${API}/api/recipes/${id}`, { method: "DELETE" });
@@ -2954,7 +2971,31 @@ function renderCookingSteps() {
 function cookingKeyHandler(e) {
     if (e.key === "Escape") {
         exitCookingMode();
+        return;
     }
+    if (!cookingRecipe) return;
+    const total = cookingRecipe.instructions.length;
+    if (total === 0) return;
+
+    let target = null;
+    if (e.key === "ArrowDown") {
+        target = cookingStep < 0 ? 0 : Math.min(cookingStep + 1, total - 1);
+    } else if (e.key === "ArrowUp") {
+        target = cookingStep < 0 ? 0 : Math.max(cookingStep - 1, 0);
+    }
+    if (target === null) return;
+
+    e.preventDefault();
+    if (target === cookingStep) return;
+
+    const list = $("#cooking-steps-list");
+    list.querySelectorAll(".cooking-step-item.active").forEach(el => el.classList.remove("active"));
+    const item = list.querySelector(`.cooking-step-item[data-step="${target}"]`);
+    if (item) {
+        item.classList.add("active");
+        item.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    cookingStep = target;
 }
 
 // Screen Wake Lock API
