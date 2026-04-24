@@ -1432,7 +1432,39 @@ def api_update_settings():
 
 
 # ──────────────────────────────────────
+# Test-only routes (E2E harness). Activated with FLASK_TEST_MODE=1.
+# ──────────────────────────────────────
+
+if os.getenv("FLASK_TEST_MODE") == "1":
+    @app.route("/test/login", methods=["POST"])
+    def test_login():
+        data = request.get_json(silent=True) or {}
+        email = data.get("email", "test@example.com")
+        user = models.get_or_create_user(
+            google_id=f"test-{email}",
+            email=email,
+            name=data.get("name", "Test User"),
+        )
+        session.permanent = True
+        session["user_id"] = user["id"]
+        session["user_name"] = user["name"]
+        return jsonify({"user_id": user["id"]})
+
+    @app.route("/test/reset", methods=["POST"])
+    def test_reset():
+        conn = models.get_db()
+        for table in ("calendar_entries", "custom_shopping_items", "settings", "recipes", "users"):
+            try:
+                conn.execute(f"DELETE FROM {table}")
+            except Exception:
+                pass
+        conn.commit()
+        conn.close()
+        session.clear()
+        return jsonify({"ok": True})
+
 
 if __name__ == "__main__":
     debug = os.getenv("FLASK_ENV", "development") != "production"
-    app.run(host="0.0.0.0", debug=debug, port=5001)
+    port = int(os.getenv("PORT", "5001"))
+    app.run(host="0.0.0.0", debug=debug, port=port)

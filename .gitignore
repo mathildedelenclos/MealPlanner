@@ -29,3 +29,9 @@ build/
 server.log
 nohup.out
 *.log
+
+# Node / Playwright
+node_modules/
+test-results/
+playwright-report/
+playwright/.cache/

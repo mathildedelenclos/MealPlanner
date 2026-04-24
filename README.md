@@ -65,11 +65,23 @@ Copy `.env.example` to `.env` and fill in the values:
 
 ## Running Tests
 
+Backend API tests (pytest, isolated SQLite per test):
+
 ```bash
-python -m pytest tests/ -v
+python -m pytest tests/test_app.py -v
 ```
 
-Tests use an isolated SQLite file per test — the real database is never touched. The full suite also runs automatically on every push via GitHub Actions.
+End-to-end tests (Playwright, desktop + iPhone emulation):
+
+```bash
+npm install
+npx playwright install chromium webkit
+npm run test:e2e                 # both projects (desktop + mobile)
+npx playwright test --project=desktop
+npx playwright test --project=mobile
+```
+
+E2E tests spin up the Flask app on port 5002 with `FLASK_TEST_MODE=1` (activates `/test/login` and `/test/reset` routes) against a temp SQLite file at `/tmp/meal_e2e.db`, so the real database is never touched. The full pytest suite also runs automatically on every push via GitHub Actions.
 
 ## Tech Stack
 
