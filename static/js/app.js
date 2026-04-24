@@ -27,6 +27,7 @@ const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 const show = (el) => el.classList.remove("hidden");
 const hide = (el) => el.classList.add("hidden");
+const IS_TOUCH = window.matchMedia("(hover: none)").matches;
 
 // ═══════════════════════════════════
 // Navigation (URL-based routing)
@@ -1552,6 +1553,7 @@ function openEntryContextMenu(entry) {
         if (closed) return;
         closed = true;
         menu.remove();
+        document.removeEventListener("touchstart", onOutsideTouch, true);
         if (isRecipe && currentServings !== origServings) {
             fetch(`${API}/api/calendar/entries/${entryId}/servings`, {
                 method: "PATCH",
@@ -1561,18 +1563,27 @@ function openEntryContextMenu(entry) {
         }
     }
 
-    // Close on mouseleave from entry (with delay so moving to menu doesn't close it)
-    let leaveTimer = null;
-    function startLeaveTimer() {
-        leaveTimer = setTimeout(() => closeMenu(), 200);
+    function onOutsideTouch(e) {
+        if (!entry.contains(e.target)) closeMenu();
     }
-    function cancelLeaveTimer() {
-        if (leaveTimer) { clearTimeout(leaveTimer); leaveTimer = null; }
+
+    if (IS_TOUCH) {
+        // Close when tapping anywhere outside the entry/menu
+        setTimeout(() => document.addEventListener("touchstart", onOutsideTouch, true), 0);
+    } else {
+        // Close on mouseleave from entry (with delay so moving to menu doesn't close it)
+        let leaveTimer = null;
+        function startLeaveTimer() {
+            leaveTimer = setTimeout(() => closeMenu(), 200);
+        }
+        function cancelLeaveTimer() {
+            if (leaveTimer) { clearTimeout(leaveTimer); leaveTimer = null; }
+        }
+        entry.addEventListener("mouseleave", startLeaveTimer);
+        entry.addEventListener("mouseenter", cancelLeaveTimer);
+        menu.addEventListener("mouseenter", cancelLeaveTimer);
+        menu.addEventListener("mouseleave", startLeaveTimer);
     }
-    entry.addEventListener("mouseleave", startLeaveTimer);
-    entry.addEventListener("mouseenter", cancelLeaveTimer);
-    menu.addEventListener("mouseenter", cancelLeaveTimer);
-    menu.addEventListener("mouseleave", startLeaveTimer);
 }
 
 // ── Edit note modal ──
@@ -1620,11 +1631,28 @@ function bindCalendarEvents(grid) {
         btn.addEventListener("click", () => openAddMealModal(btn.dataset.day, btn.dataset.meal));
     });
 
-    // Bind entry hover → context menu
+    // Bind entry context menu — hover on desktop, long-press on touch
     grid.querySelectorAll(".cal-entry").forEach((entry) => {
-        entry.addEventListener("mouseenter", () => {
-            openEntryContextMenu(entry);
-        });
+        if (!IS_TOUCH) {
+            entry.addEventListener("mouseenter", () => openEntryContextMenu(entry));
+            return;
+        }
+        let pressTimer = null;
+        const cancel = () => {
+            if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+        };
+        entry.addEventListener("touchstart", () => {
+            cancel();
+            pressTimer = setTimeout(() => {
+                pressTimer = null;
+                entry.dataset.longPressFired = "1";
+                if (navigator.vibrate) navigator.vibrate(10);
+                openEntryContextMenu(entry);
+            }, 500);
+        }, { passive: true });
+        entry.addEventListener("touchend", cancel);
+        entry.addEventListener("touchcancel", cancel);
+        entry.addEventListener("touchmove", cancel, { passive: true });
     });
 
     // Bind recipe links
@@ -1632,6 +1660,11 @@ function bindCalendarEvents(grid) {
         link.addEventListener("click", (ev) => {
             ev.preventDefault();
             ev.stopPropagation();
+            const entry = link.closest(".cal-entry");
+            if (entry && entry.dataset.longPressFired) {
+                delete entry.dataset.longPressFired;
+                return;
+            }
             const recipeId = link.dataset.recipeId;
             const entryId = link.dataset.entryId;
             const servings = link.dataset.servings ? parseInt(link.dataset.servings) : null;
@@ -1643,6 +1676,10 @@ function bindCalendarEvents(grid) {
     grid.querySelectorAll(".cal-entry-note").forEach((entry) => {
         entry.addEventListener("click", (ev) => {
             ev.stopPropagation();
+            if (entry.dataset.longPressFired) {
+                delete entry.dataset.longPressFired;
+                return;
+            }
             openEditNoteModal(parseInt(entry.dataset.entryId), entry.dataset.note || "");
         });
     });

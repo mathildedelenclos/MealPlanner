@@ -1675,7 +1675,7 @@ li.category-hidden {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 24px;
+    padding: calc(12px + env(safe-area-inset-top)) 24px 12px;
     background: #1e293b;
     border-bottom: 1px solid #334155;
     flex-shrink: 0;
@@ -2009,7 +2009,7 @@ li.category-hidden {
 /* Responsive cooking mode */
 @media (max-width: 768px) {
     .cooking-topbar {
-        padding: 10px 16px;
+        padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
     }
     .cooking-title {
         display: none;
@@ -2170,12 +2170,14 @@ li.category-hidden {
 .cal-week-meals {
     flex: 1;
     display: flex;
+    min-width: 0;
     min-height: 80px;
 }
 
 /* Meal slots in week view */
 .calendar-week-grid .cal-meal-slot {
     flex: 1;
+    min-width: 0;
     padding: 10px 12px;
     border-radius: 0;
     min-height: auto;
@@ -2324,6 +2326,9 @@ li.category-hidden {
     cursor: grab;
     overflow: visible;
     transition: box-shadow var(--transition);
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
 }
 .cal-entry:hover {
     box-shadow: 0 1px 4px rgba(0,0,0,.12);
@@ -2857,6 +2862,13 @@ li.category-hidden {
     .cal-entry { font-size: 9px; padding: 1px 3px; }
     .cal-meal-label { font-size: 0; height: 0; margin: 0; }
     .cal-add-btn { font-size: 9px; padding: 2px 0; min-height: 20px; }
+
+    /* ── Week view shrink ── */
+    .cal-week-day-label { width: 56px; padding: 10px 4px; }
+    .cal-week-date-num { font-size: 18px; }
+    .calendar-week-grid .cal-meal-slot { padding: 8px 6px; }
+    .calendar-week-grid .cal-entry { padding: 4px 6px; font-size: 12px; }
+    .calendar-week-grid .cal-entry-link { font-size: 12px; }
 
     /* ── Settings ── */
     .settings-card { max-width: none; }
