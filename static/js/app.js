@@ -54,6 +54,7 @@ const VIEW_TO_PATH = {
 };
 
 function navigateToView(view, pushState = true) {
+    if (typeof exitCopyMode === "function") exitCopyMode();
     $$(".nav-link").forEach((l) => l.classList.remove("active"));
     const activeLink = document.querySelector(`.nav-link[data-view="${view}"]`);
     if (activeLink) activeLink.classList.add("active");
@@ -1626,9 +1627,22 @@ function openEditNoteModal(entryId, currentNote) {
 }
 
 function bindCalendarEvents(grid) {
-    // Bind add buttons
+    // Bind add buttons — if a copy is pending, paste the entry here; otherwise open add-meal flow
     grid.querySelectorAll(".cal-add-btn").forEach((btn) => {
-        btn.addEventListener("click", () => openAddMealModal(btn.dataset.day, btn.dataset.meal));
+        btn.addEventListener("click", async () => {
+            if (pendingCopyEntryId) {
+                await fetch(`${API}/api/calendar/entries/${pendingCopyEntryId}/copy`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ entry_date: btn.dataset.day, meal_type: btn.dataset.meal }),
+                });
+                pendingCopyCount++;
+                updateCopyBanner();
+                loadCalendar();
+                return;
+            }
+            openAddMealModal(btn.dataset.day, btn.dataset.meal);
+        });
     });
 
     // Bind entry context menu — hover on desktop, long-press on touch
@@ -1941,67 +1955,51 @@ function openAssignToCalendarModal(recipeId, title, defaultServings) {
 }
 
 // ── Copy-to picker modal ──
+// Pick-a-slot copy flow: tapping "Copy to" arms pendingCopyEntryId, then
+// each tap on a calendar + button copies the entry there. Stays armed until
+// the user taps Done so they can copy to multiple slots in one go.
+let pendingCopyEntryId = null;
+let pendingCopyCount = 0;
+
+function updateCopyBanner() {
+    const banner = document.getElementById("copy-mode-banner");
+    if (!banner) return;
+    const msg = pendingCopyCount === 0
+        ? t("copy.banner")
+        : t("copy.bannerCount", { n: pendingCopyCount });
+    banner.querySelector(".copy-mode-msg").textContent = msg;
+    banner.querySelector(".copy-mode-cancel").textContent =
+        pendingCopyCount === 0 ? t("common.cancel") : t("common.done");
+}
+
+function enterCopyMode(entryId) {
+    pendingCopyEntryId = entryId;
+    pendingCopyCount = 0;
+    document.body.classList.add("copy-mode");
+    let banner = document.getElementById("copy-mode-banner");
+    if (!banner) {
+        banner = document.createElement("div");
+        banner.id = "copy-mode-banner";
+        banner.className = "copy-mode-banner";
+        banner.innerHTML = `
+            <span class="copy-mode-msg"></span>
+            <button class="copy-mode-cancel"></button>`;
+        document.body.appendChild(banner);
+        banner.querySelector(".copy-mode-cancel").addEventListener("click", exitCopyMode);
+    }
+    updateCopyBanner();
+}
+
+function exitCopyMode() {
+    pendingCopyEntryId = null;
+    pendingCopyCount = 0;
+    document.body.classList.remove("copy-mode");
+    const banner = document.getElementById("copy-mode-banner");
+    if (banner) banner.remove();
+}
+
 function openCopyModal(entryId) {
-    const weekDates = getWeekGridDates(calendarViewMode === "week" ? calendarWeekStart : getWeekStart(new Date()));
-    const uniqueDates = weekDates.map(d => isoDate(d));
-
-    const modal = document.createElement("div");
-    modal.className = "add-meal-modal";
-    modal.innerHTML = `
-        <div class="modal-inner">
-            <h3>${t("copy.title")}</h3>
-            <p class="copy-hint">${t("copy.hint")}</p>
-            <div class="copy-grid">
-                ${uniqueDates.map((date) => {
-                    const d = new Date(date + "T00:00:00");
-                    const label = d.toLocaleDateString(getLocale(), { weekday: "short", day: "numeric", month: "short" });
-                    return `
-                    <div class="copy-day">
-                        <strong>${label}</strong>
-                        ${MEALS.map((meal) => `
-                            <button class="btn btn-secondary copy-target" data-day="${date}" data-meal="${meal}">
-                                ${tMeal(meal)}
-                            </button>`).join("")}
-                    </div>`;
-                }).join("")}
-            </div>
-            <div class="form-actions" style="margin-top:16px">
-                <button class="btn btn-primary copy-confirm" disabled>${t("copy.button")}</button>
-                <button class="btn btn-ghost cancel-add">${t("common.cancel")}</button>
-            </div>
-        </div>`;
-
-    document.body.appendChild(modal);
-    modal.addEventListener("click", (e) => { if (e.target === modal) modal.remove(); });
-    const confirmBtn = modal.querySelector(".copy-confirm");
-
-    modal.querySelectorAll(".copy-target").forEach((btn) => {
-        btn.addEventListener("click", () => {
-            btn.classList.toggle("copy-selected");
-            const anySelected = modal.querySelector(".copy-target.copy-selected");
-            confirmBtn.disabled = !anySelected;
-        });
-    });
-
-    modal.querySelector(".cancel-add").addEventListener("click", () => modal.remove());
-
-    confirmBtn.addEventListener("click", async () => {
-        const selected = modal.querySelectorAll(".copy-target.copy-selected");
-        if (selected.length === 0) return;
-        confirmBtn.disabled = true;
-        confirmBtn.textContent = t("copy.copying");
-        await Promise.all(
-            Array.from(selected).map((btn) =>
-                fetch(`${API}/api/calendar/entries/${entryId}/copy`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ entry_date: btn.dataset.day, meal_type: btn.dataset.meal }),
-                })
-            )
-        );
-        modal.remove();
-        loadCalendar();
-    });
+    enterCopyMode(entryId);
 }
 
 async function openAddMealModal(day, meal) {

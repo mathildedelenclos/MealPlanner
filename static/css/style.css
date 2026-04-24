@@ -401,6 +401,53 @@ body {
     margin-bottom: 4px;
 }
 
+/* Copy-mode: pick-a-slot flow */
+.copy-mode-banner {
+    position: fixed;
+    bottom: calc(72px + env(safe-area-inset-bottom));
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--primary);
+    color: #fff;
+    padding: 10px 14px 10px 18px;
+    border-radius: 999px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    z-index: 10000;
+    font-size: 14px;
+    font-weight: 500;
+    max-width: calc(100% - 32px);
+    animation: fadeIn 0.2s ease;
+}
+.copy-mode-banner .copy-mode-cancel {
+    background: rgba(255,255,255,0.18);
+    color: #fff;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+}
+.copy-mode-banner .copy-mode-cancel:hover {
+    background: rgba(255,255,255,0.28);
+}
+@media (min-width: 601px) {
+    .copy-mode-banner { bottom: 24px; }
+}
+.copy-mode .cal-add-btn {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+    animation: copy-pulse 1.4s ease-in-out infinite;
+}
+@keyframes copy-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(59,130,246,0.5); }
+    50%      { box-shadow: 0 0 0 6px rgba(59,130,246,0); }
+}
+
 .meal-recipe-link {
     color: var(--text);
     text-decoration: none;

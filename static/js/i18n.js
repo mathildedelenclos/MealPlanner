@@ -49,6 +49,8 @@ const TRANSLATIONS = {
     "copy.hint": "Select one or more slots, then press Copy.",
     "copy.button": "Copy",
     "copy.copying": "Copying\u2026",
+    "copy.banner": "Tap + on the calendar to copy the recipe",
+    "copy.bannerCount": "Copied to {{n}} slot(s) — tap + to copy more",
 
     // Edit note
     "editNote.title": "Edit Note",
@@ -220,6 +222,7 @@ const TRANSLATIONS = {
 
     // Common
     "common.cancel": "Cancel",
+    "common.done": "Done",
 
     // Days
     "day.sun": "Sun", "day.mon": "Mon", "day.tue": "Tue", "day.wed": "Wed",
@@ -270,6 +273,8 @@ const TRANSLATIONS = {
     "copy.hint": "S\u00e9lectionnez un ou plusieurs cr\u00e9neaux, puis appuyez sur Copier.",
     "copy.button": "Copier",
     "copy.copying": "Copie en cours\u2026",
+    "copy.banner": "Appuyez sur + dans le calendrier pour copier la recette",
+    "copy.bannerCount": "Copié vers {{n}} créneau(x) — appuyez sur + pour en ajouter",
 
     // Edit note
     "editNote.title": "Modifier la note",
@@ -441,6 +446,7 @@ const TRANSLATIONS = {
 
     // Common
     "common.cancel": "Annuler",
+    "common.done": "Terminé",
 
     // Days
     "day.sun": "Dim", "day.mon": "Lun", "day.tue": "Mar", "day.wed": "Mer",
