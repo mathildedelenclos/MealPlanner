@@ -19,7 +19,18 @@
     --radius-sm: 8px;
     --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
     --shadow-lg: 0 10px 25px rgba(0,0,0,.1);
+    --shadow-hover: 0 4px 12px rgba(15,23,42,.08), 0 2px 4px rgba(15,23,42,.06);
     --transition: .2s ease;
+    /* Meal accent palette — complementary earthy: terracotta (lunch), forest green (dinner), ochre (notes) */
+    --lunch-accent: #c2725a;
+    --lunch-tint: #fce7da;
+    --lunch-tint-2: #f5c9b1;
+    --dinner-accent: #3d6a47;
+    --dinner-tint: #d9ead0;
+    --dinner-tint-2: #b8d4b4;
+    --note-accent: #b89845;
+    --note-tint: #fcf6e4;
+    --note-tint-2: #f1e2a8;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -2157,19 +2168,21 @@ li.category-hidden {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     overflow: visible;
-    transition: box-shadow var(--transition);
+    box-shadow: 0 1px 2px rgba(15,23,42,.04);
+    transition: box-shadow var(--transition), transform var(--transition);
 }
 .cal-week-row:hover {
-    box-shadow: var(--shadow);
+    box-shadow: var(--shadow-hover);
+    transform: translateY(-1px);
 }
 
-/* Today row highlight */
+/* Today row highlight — soft primary gradient on the day label, subtle ring on the row */
 .cal-week-row-today {
-    border-color: var(--primary);
-    box-shadow: 0 0 0 1px var(--primary), var(--shadow);
+    border-color: transparent;
+    box-shadow: 0 0 0 1.5px var(--primary), 0 4px 16px rgba(59,130,246,.12);
 }
 .cal-week-row-today .cal-week-day-label {
-    background: var(--primary);
+    background: linear-gradient(140deg, var(--primary) 0%, #6366f1 100%);
     color: #fff;
 }
 .cal-week-row-today .cal-week-day-name,
@@ -2187,9 +2200,10 @@ li.category-hidden {
     align-items: center;
     justify-content: center;
     padding: 12px 8px;
-    background: var(--bg);
+    background: linear-gradient(180deg, var(--bg) 0%, #eef0f7 100%);
     border-right: 1px solid var(--border);
-    gap: 1px;
+    border-radius: calc(var(--radius) - 1px) 0 0 calc(var(--radius) - 1px);
+    gap: 2px;
     transition: background var(--transition), color var(--transition);
 }
 .cal-week-day-name {
@@ -2225,29 +2239,34 @@ li.category-hidden {
 .calendar-week-grid .cal-meal-slot {
     flex: 1;
     min-width: 0;
-    padding: 10px 12px;
+    padding: 12px 14px;
     border-radius: 0;
     min-height: auto;
     border: none;
     border-left: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
 }
 .calendar-week-grid .cal-meal-slot:first-child {
     border-left: none;
 }
 .calendar-week-grid .cal-meal-label {
-    font-size: 10px;
-    letter-spacing: 0.05em;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0.01em;
+    color: var(--text-muted);
     margin-bottom: 2px;
 }
+.cal-meal-slot[data-meal="lunch"] > .cal-meal-label::before  { content: "🥗 "; }
+.cal-meal-slot[data-meal="dinner"] > .cal-meal-label::before { content: "🍝 "; }
 
 /* Entry chips in week view */
 .calendar-week-grid .cal-entry {
-    padding: 5px 10px;
+    padding: 6px 10px 6px 12px;
     font-size: 13px;
-    border-radius: 6px;
+    border-radius: 8px;
     gap: 6px;
     margin-bottom: 4px;
 }
@@ -2256,9 +2275,8 @@ li.category-hidden {
 }
 .calendar-week-grid .cal-entry-srv {
     font-size: 10px;
-    background: rgba(59,130,246,0.08);
-    padding: 1px 6px;
-    border-radius: 3px;
+    padding: 2px 7px;
+    border-radius: 999px;
 }
 .calendar-week-grid .cal-entry-actions {
     padding: 0 6px;
@@ -2269,14 +2287,25 @@ li.category-hidden {
     padding: 0 3px;
 }
 
-/* Add button in week view */
+/* Add button in week view — dashed placeholder */
 .calendar-week-grid .cal-add-btn {
     width: auto;
-    align-self: flex-start;
-    padding: 3px 14px;
-    font-size: 12px;
-    border-radius: 6px;
+    align-self: stretch;
+    padding: 7px 0;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: transparent;
+    border: 1.5px dashed var(--border);
+    border-radius: 10px;
     margin-top: auto;
+    transition: color var(--transition), border-color var(--transition), background var(--transition);
+}
+.calendar-week-grid .cal-add-btn:hover {
+    color: var(--primary);
+    border-color: var(--primary);
+    border-style: solid;
+    background: rgba(59,130,246,0.06);
 }
 
 /* ── Month view (existing) ── */
@@ -2311,18 +2340,23 @@ li.category-hidden {
 .cal-cell {
     background: var(--card-bg);
     border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 4px 5px;
+    border-radius: 8px;
+    padding: 6px 6px;
     min-height: 110px;
     display: flex;
     flex-direction: column;
     gap: 2px;
     overflow: visible;
+    transition: box-shadow var(--transition), transform var(--transition);
 }
-.cal-cell-dim { opacity: 0.35; }
+.cal-cell:hover {
+    box-shadow: var(--shadow);
+}
+.cal-cell-dim { opacity: 0.4; }
 .cal-cell-today {
-    border-color: var(--primary);
-    box-shadow: inset 0 0 0 2px var(--primary);
+    border-color: transparent;
+    background: linear-gradient(180deg, rgba(59,130,246,0.06) 0%, rgba(255,255,255,1) 60%);
+    box-shadow: 0 0 0 1.5px var(--primary), 0 2px 8px rgba(59,130,246,.12);
 }
 .cal-cell-date {
     font-weight: 700;
@@ -2330,6 +2364,9 @@ li.category-hidden {
     color: var(--text);
     line-height: 1;
     margin-bottom: 1px;
+}
+.cal-cell-today .cal-cell-date {
+    color: var(--primary);
 }
 
 /* ── Meal slot ── */
@@ -2350,9 +2387,8 @@ li.category-hidden {
 }
 .cal-meal-label {
     font-size: 9px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
+    font-weight: 600;
+    letter-spacing: 0.01em;
     color: var(--text-muted);
     display: block;
     margin-bottom: 1px;
@@ -2363,29 +2399,66 @@ li.category-hidden {
     position: relative;
     display: flex;
     align-items: center;
-    gap: 3px;
-    background: #eef2ff;
-    border-radius: 4px;
-    padding: 2px 5px;
+    gap: 6px;
+    background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+    border-radius: 6px;
+    padding: 3px 8px 3px 10px;
     font-size: 11px;
-    line-height: 1.3;
+    line-height: 1.35;
     margin-bottom: 2px;
     cursor: grab;
     overflow: visible;
-    transition: box-shadow var(--transition);
+    transition: box-shadow var(--transition), transform var(--transition);
     -webkit-touch-callout: none;
     -webkit-user-select: none;
     user-select: none;
 }
-.cal-entry:hover {
-    box-shadow: 0 1px 4px rgba(0,0,0,.12);
+.cal-entry::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--primary);
+    border-radius: 6px 0 0 6px;
+    pointer-events: none;
+}
+.cal-entry:hover,
+.cal-entry:has(.cal-ctx-menu) {
+    box-shadow: var(--shadow-hover);
+    transform: translateY(-1px);
+    z-index: 20;
 }
 .cal-entry.dragging { opacity: 0.5; }
-.cal-entry-note { background: #fff8e1; }
-.cal-entry-deleted { background: #f1f5f9; opacity: .6; font-style: italic; }
+
+/* Meal-type accent colors for the left stripe + tinted fill (recipes only; notes + deleted get their own look) */
+.cal-meal-slot[data-meal="lunch"] .cal-entry:not(.cal-entry-note):not(.cal-entry-deleted) {
+    background: linear-gradient(135deg, var(--lunch-tint) 0%, var(--lunch-tint-2) 100%);
+}
+.cal-meal-slot[data-meal="lunch"] .cal-entry:not(.cal-entry-note):not(.cal-entry-deleted)::before {
+    background: var(--lunch-accent);
+}
+.cal-meal-slot[data-meal="dinner"] .cal-entry:not(.cal-entry-note):not(.cal-entry-deleted) {
+    background: linear-gradient(135deg, var(--dinner-tint) 0%, var(--dinner-tint-2) 100%);
+}
+.cal-meal-slot[data-meal="dinner"] .cal-entry:not(.cal-entry-note):not(.cal-entry-deleted)::before {
+    background: var(--dinner-accent);
+}
+
+/* Notes — ochre accent across both meal slots */
+.cal-entry-note {
+    background: linear-gradient(135deg, var(--note-tint) 0%, var(--note-tint-2) 100%);
+}
+.cal-entry-note::before { background: var(--note-accent); }
+
+.cal-entry-deleted {
+    background: #f1f5f9;
+    opacity: .6;
+    font-style: italic;
+}
+.cal-entry-deleted::before { background: #94a3b8; }
 
 .cal-entry-link {
-    color: var(--primary);
+    color: var(--text);
     text-decoration: none;
     font-weight: 500;
     min-width: 0;
@@ -2394,7 +2467,7 @@ li.category-hidden {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.cal-entry-link:hover { text-decoration: underline; }
+.cal-entry-link:hover { color: var(--primary); text-decoration: none; }
 
 .cal-entry-text {
     min-width: 0;
@@ -2406,7 +2479,11 @@ li.category-hidden {
 
 .cal-entry-srv {
     font-size: 9px;
-    color: var(--text-muted);
+    font-weight: 600;
+    color: rgba(30,41,59,0.6);
+    background: rgba(255,255,255,0.55);
+    padding: 1px 7px;
+    border-radius: 999px;
     white-space: nowrap;
     flex-shrink: 0;
 }
@@ -2482,19 +2559,20 @@ li.category-hidden {
 /* ── Add button ── */
 .cal-add-btn {
     background: none;
-    border: 1px dashed var(--border);
-    border-radius: 4px;
+    border: 1.5px dashed var(--border);
+    border-radius: 6px;
     cursor: pointer;
     font-size: 11px;
     color: var(--text-muted);
     width: 100%;
-    padding: 1px 0;
-    transition: background var(--transition), color var(--transition);
+    padding: 2px 0;
+    transition: background var(--transition), color var(--transition), border-color var(--transition);
 }
 .cal-add-btn:hover {
-    background: var(--primary);
-    color: #fff;
+    background: rgba(59,130,246,0.06);
+    color: var(--primary);
     border-color: var(--primary);
+    border-style: solid;
 }
 
 /* Shopping week checkboxes */
@@ -2921,6 +2999,7 @@ li.category-hidden {
         padding: 8px 12px;
         border-right: none;
         border-bottom: 1px solid var(--border);
+        border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
     }
     .cal-week-date-num { font-size: 18px; line-height: 1; }
     .cal-week-meals { min-height: auto; }

@@ -6,7 +6,10 @@
       "Bash(ssh root@192.168.0.191 \"cd /opt/stacks/meal-planner && docker compose ps\")",
       "Bash(ssh root@192.168.0.191 'docker compose -f /opt/stacks/meal-planner/docker-compose.yml exec mealplanner python3 -c \":*)",
       "Bash(ssh root@192.168.0.191 \"find /opt/stacks/meal-planner -type f | head -20 && docker inspect meal-planner-mealplanner-1 | grep -E 'Mounts|Source|Destination' | head -20\")",
-      "Bash(ssh root@192.168.0.191 'docker compose -f /opt/stacks/meal-planner/compose.yaml exec mealplanner python3 -c \":*)"
+      "Bash(ssh root@192.168.0.191 'docker compose -f /opt/stacks/meal-planner/compose.yaml exec mealplanner python3 -c \":*)",
+      "Bash(docker info)",
+      "mcp__ide__getDiagnostics",
+      "mcp__claude_ai_Atlassian__getJiraIssue"
     ]
   }
 }
