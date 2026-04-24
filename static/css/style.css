@@ -2859,14 +2859,16 @@ li.category-hidden {
         padding: 2px 3px;
     }
     .cal-cell-date { font-size: 10px; }
-    .cal-entry { font-size: 9px; padding: 1px 3px; }
-    .cal-meal-label { font-size: 0; height: 0; margin: 0; }
-    .cal-add-btn { font-size: 9px; padding: 2px 0; min-height: 20px; }
+    .calendar-month-grid .cal-entry { font-size: 9px; padding: 1px 3px; }
+    .calendar-month-grid .cal-meal-label { font-size: 0; height: 0; margin: 0; }
+    .calendar-month-grid .cal-add-btn { font-size: 9px; padding: 2px 0; min-height: 20px; }
 
     /* ── Week view shrink ── */
-    .cal-week-day-label { width: 56px; padding: 10px 4px; }
-    .cal-week-date-num { font-size: 18px; }
-    .calendar-week-grid .cal-meal-slot { padding: 8px 6px; }
+    .cal-week-day-label { width: 64px; padding: 10px 6px; }
+    .cal-week-day-name { font-size: 10px; }
+    .cal-week-date-num { font-size: 20px; }
+    .cal-week-month-name { font-size: 9px; }
+    .calendar-week-grid .cal-meal-slot { padding: 8px 8px; }
     .calendar-week-grid .cal-entry { padding: 4px 6px; font-size: 12px; }
     .calendar-week-grid .cal-entry-link { font-size: 12px; }
 
