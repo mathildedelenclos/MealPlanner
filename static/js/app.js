@@ -1693,23 +1693,27 @@ function bindCalendarEvents(grid) {
         });
     });
 
-    // ── Drag-and-drop ──
-    grid.querySelectorAll(".cal-entry").forEach((item) => {
-        item.addEventListener("dragstart", (e) => {
-            e.dataTransfer.setData("text/plain", item.dataset.entryId);
-            e.dataTransfer.effectAllowed = "copyMove";
-            item.classList.add("dragging");
-            setTimeout(() => {
-                grid.querySelectorAll(".cal-meal-slot").forEach((s) => s.classList.add("drop-target"));
-            }, 0);
-        });
-        item.addEventListener("dragend", () => {
-            item.classList.remove("dragging");
-            grid.querySelectorAll(".cal-meal-slot").forEach((s) => {
-                s.classList.remove("drop-target", "drop-over");
+    // ── Drag-and-drop (desktop only — touch users get "Copy to" in the long-press menu) ──
+    if (IS_TOUCH) {
+        grid.querySelectorAll(".cal-entry").forEach((item) => item.removeAttribute("draggable"));
+    } else {
+        grid.querySelectorAll(".cal-entry").forEach((item) => {
+            item.addEventListener("dragstart", (e) => {
+                e.dataTransfer.setData("text/plain", item.dataset.entryId);
+                e.dataTransfer.effectAllowed = "copyMove";
+                item.classList.add("dragging");
+                setTimeout(() => {
+                    grid.querySelectorAll(".cal-meal-slot").forEach((s) => s.classList.add("drop-target"));
+                }, 0);
+            });
+            item.addEventListener("dragend", () => {
+                item.classList.remove("dragging");
+                grid.querySelectorAll(".cal-meal-slot").forEach((s) => {
+                    s.classList.remove("drop-target", "drop-over");
+                });
             });
         });
-    });
+    }
 
     grid.querySelectorAll(".cal-meal-slot").forEach((slot) => {
         slot.addEventListener("dragover", (e) => {
