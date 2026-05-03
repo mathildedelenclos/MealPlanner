@@ -1,10 +1,14 @@
 import os
 import io
 import gzip
+import ipaddress
 import json
+import logging
 import re
+import socket
 import zipfile
 import threading
+from urllib.parse import urlparse
 import requests
 from functools import wraps
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_from_directory
@@ -13,6 +17,8 @@ from dotenv import load_dotenv
 from recipe_scrapers import scrape_html
 from google import genai
 from authlib.integrations.flask_client import OAuth
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 from datetime import datetime, timedelta
 
@@ -20,10 +26,160 @@ import models
 
 load_dotenv()
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+log = logging.getLogger("mealplanner")
+
+IS_PRODUCTION = os.getenv("FLASK_ENV") == "production"
+IS_TEST_MODE = os.getenv("FLASK_TEST_MODE") == "1"
+
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
-app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key")
-app.permanent_session_lifetime = timedelta(days=365)
+
+_secret = os.getenv("SECRET_KEY")
+if IS_PRODUCTION and (not _secret or _secret == "dev-secret-key"):
+    raise RuntimeError(
+        "SECRET_KEY must be set to a non-default value in production. "
+        "Refusing to start with an insecure session secret."
+    )
+app.secret_key = _secret or "dev-secret-key"
+app.permanent_session_lifetime = timedelta(days=30)
+app.config.update(
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_HTTPONLY=True,
+    # Secure only when actually serving over HTTPS in prod. Test mode runs
+    # the prod-like config over HTTP — leaving Secure on would drop the cookie.
+    SESSION_COOKIE_SECURE=IS_PRODUCTION and not IS_TEST_MODE,
+)
+
+# Maximum response size we'll accept when scraping a recipe page (bytes).
+MAX_SCRAPE_BYTES = 5 * 1024 * 1024  # 5 MB
+
+# Single source of truth for the Gemini model.
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
+
+# Rate limiter: Gemini and scrape endpoints get tighter caps.
+limiter = Limiter(
+    key_func=lambda: str(session.get("user_id") or get_remote_address()),
+    app=app,
+    default_limits=[],
+    storage_uri="memory://",
+    enabled=not IS_TEST_MODE,
+)
+
+
+# ──────────────────────────────────────
+# CSRF: lightweight Origin/Referer check on state-changing requests.
+# Cross-origin browser POSTs always include Origin (or at least Referer);
+# CSRF attacks via form/auto-submit can't forge a same-origin Origin header.
+# ──────────────────────────────────────
+
+# Endpoints that legitimately receive cross-origin or origin-less POSTs.
+_CSRF_EXEMPT_PREFIXES = ("/auth/", "/test/", "/sw.js", "/manifest.json")
+# /api/import-url is hit by iOS Shortcuts which can't send a browser Origin.
+_CSRF_EXEMPT_PATHS = {"/api/import-url"}
+
+
+def _expected_origins():
+    """Origins we trust for state-changing requests."""
+    base = os.getenv("BASE_URL", "").rstrip("/")
+    if base:
+        yield base
+    # Also trust the host the request came in on (covers local dev).
+    if request.host_url:
+        yield request.host_url.rstrip("/")
+
+
+@app.before_request
+def csrf_origin_check():
+    if IS_TEST_MODE or app.config.get("TESTING"):
+        return
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return
+    if any(request.path.startswith(p) for p in _CSRF_EXEMPT_PREFIXES):
+        return
+    if request.path in _CSRF_EXEMPT_PATHS:
+        return
+    origin = request.headers.get("Origin") or request.headers.get("Referer", "")
+    if not origin:
+        # No Origin/Referer at all on a state-changing request from a
+        # non-exempt path — almost certainly a non-browser client. Reject.
+        return jsonify({"error": "Origin header required"}), 403
+    for trusted in _expected_origins():
+        if origin == trusted or origin.startswith(trusted + "/"):
+            return
+    log.warning("Rejected cross-origin %s %s from origin=%s", request.method, request.path, origin)
+    return jsonify({"error": "Cross-origin request rejected"}), 403
+
+
+# ──────────────────────────────────────
+# SSRF guard: validate URLs before fetching them server-side.
+# ──────────────────────────────────────
+
+def _is_public_url(url):
+    """Return True if `url` looks safe to fetch (http(s), public host).
+
+    Rejects: non-http schemes, IP literals in private ranges, hostnames that
+    resolve only to private/loopback/link-local IPs.
+    """
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False
+    if parsed.scheme not in ("http", "https"):
+        return False
+    host = parsed.hostname
+    if not host:
+        return False
+    # Resolve and check every IP it points to. If any resolution is private,
+    # treat it as unsafe (covers DNS rebinding to a single private IP).
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror:
+        return False
+    for info in infos:
+        ip_str = info[4][0]
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            continue
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            return False
+    return True
+
+
+def _safe_get(url, **kwargs):
+    """`requests.get` with SSRF guard + a max response size."""
+    if not _is_public_url(url):
+        raise ValueError("URL is not allowed (private host or unsupported scheme)")
+    kwargs.setdefault("timeout", 15)
+    kwargs.setdefault("allow_redirects", True)
+    kwargs["stream"] = True
+    resp = requests.get(url, **kwargs)
+    declared = resp.headers.get("Content-Length")
+    if declared and int(declared) > MAX_SCRAPE_BYTES:
+        resp.close()
+        raise ValueError(f"Response too large ({declared} bytes)")
+    chunks = []
+    total = 0
+    for chunk in resp.iter_content(chunk_size=64 * 1024):
+        chunks.append(chunk)
+        total += len(chunk)
+        if total > MAX_SCRAPE_BYTES:
+            resp.close()
+            raise ValueError(f"Response exceeded {MAX_SCRAPE_BYTES} bytes")
+    resp._content = b"".join(chunks)
+    resp._content_consumed = True
+    return resp
 
 # ──────────────────────────────────────
 # OAuth Providers
@@ -365,8 +521,8 @@ def api_rescrape_missing_images():
                 if img:
                     models.update_recipe_image(rid, img)
                 time.sleep(0.5)
-            except Exception:
-                pass
+            except Exception as exc:
+                log.warning("Image rescrape failed for recipe %s (%s): %s", rid, url, exc)
 
     threading.Thread(target=_worker, args=(pairs,), daemon=True).start()
     return jsonify({"queued": len(pairs)})
@@ -395,7 +551,7 @@ def _extract_recipe_from_social_video(url):
         return None, "Gemini API key is required to import recipes from video URLs."
 
     # Fetch the page HTML
-    resp = requests.get(
+    resp = _safe_get(
         url,
         headers={
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -404,8 +560,6 @@ def _extract_recipe_from_social_video(url):
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
         },
-        timeout=15,
-        allow_redirects=True,
     )
     html = resp.text
     final_url = resp.url  # after redirects
@@ -474,7 +628,7 @@ def _extract_recipe_from_social_video(url):
         )
 
     response = client.models.generate_content(
-        model="gemini-3-flash-preview",
+        model=GEMINI_MODEL,
         contents=[{"role": "user", "parts": [{"text": prompt}]}],
         config={
             "system_instruction": system,
@@ -504,8 +658,56 @@ def _extract_recipe_from_social_video(url):
     }, None
 
 
+def _scrape_recipe_data(url):
+    """Scrape a recipe from `url` using recipe-scrapers. Returns the recipe
+    dict (matching /api/scrape's JSON shape) or raises on failure."""
+    html = _safe_get(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        },
+    ).text
+    scraper = scrape_html(html=html, org_url=url)
+    title = scraper.title() or "Untitled Recipe"
+    ingredients = scraper.ingredients() or []
+    instructions_raw = scraper.instructions() or ""
+    if isinstance(instructions_raw, str):
+        instructions = [s.strip() for s in re.split(r"\n+", instructions_raw) if s.strip()]
+    else:
+        instructions = list(instructions_raw)
+    image = None
+    try:
+        image = scraper.image()
+    except Exception:
+        pass
+    total_time = None
+    try:
+        total_time = str(scraper.total_time()) + " min"
+    except Exception:
+        pass
+    servings = None
+    try:
+        servings = str(scraper.yields())
+    except Exception:
+        pass
+    return {
+        "title": title,
+        "ingredients": ingredients,
+        "instructions": instructions,
+        "image_url": image,
+        "total_time": total_time,
+        "servings": servings,
+        "source_url": url,
+    }
+
+
 @app.route("/api/scrape", methods=["POST"])
 @login_required_api
+@limiter.limit("30 per hour")
 def api_scrape_url():
     data = request.get_json(force=True)
     url = data.get("url", "").strip()
@@ -520,63 +722,13 @@ def api_scrape_url():
                 return jsonify({"error": error}), 400
             return jsonify(result)
         except Exception as exc:
+            log.warning("Social video scrape failed for %s: %s", url, exc)
             return jsonify({"error": f"Could not extract recipe from video: {exc}"}), 400
 
     try:
-        html = requests.get(
-            url,
-            headers={
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                              "AppleWebKit/537.36 (KHTML, like Gecko) "
-                              "Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.9",
-            },
-            timeout=15,
-        ).text
-        scraper = scrape_html(html=html, org_url=url)
-
-        title = scraper.title() or "Untitled Recipe"
-        ingredients = scraper.ingredients() or []
-        instructions_raw = scraper.instructions() or ""
-
-        # instructions() returns a single string – split into steps
-        if isinstance(instructions_raw, str):
-            instructions = [
-                s.strip() for s in re.split(r"\n+", instructions_raw) if s.strip()
-            ]
-        else:
-            instructions = list(instructions_raw)
-
-        image = None
-        try:
-            image = scraper.image()
-        except Exception:
-            pass
-
-        total_time = None
-        try:
-            total_time = str(scraper.total_time()) + " min"
-        except Exception:
-            pass
-
-        servings = None
-        try:
-            servings = str(scraper.yields())
-        except Exception:
-            pass
-
-        return jsonify({
-            "title": title,
-            "ingredients": ingredients,
-            "instructions": instructions,
-            "image_url": image,
-            "total_time": total_time,
-            "servings": servings,
-            "source_url": url,
-        })
-
+        return jsonify(_scrape_recipe_data(url))
     except Exception as exc:
+        log.warning("Scrape failed for %s: %s", url, exc)
         return jsonify({"error": f"Could not scrape recipe: {exc}"}), 400
 
 
@@ -600,48 +752,9 @@ def api_import_url():
         recipe_data = result
     else:
         try:
-            html = requests.get(
-                url,
-                headers={
-                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                                  "AppleWebKit/537.36 (KHTML, like Gecko) "
-                                  "Chrome/120.0.0.0 Safari/537.36",
-                },
-                timeout=15,
-            ).text
-            scraper = scrape_html(html=html, org_url=url)
-            title = scraper.title() or "Untitled Recipe"
-            ingredients = scraper.ingredients() or []
-            instructions_raw = scraper.instructions() or ""
-            if isinstance(instructions_raw, str):
-                instructions = [s.strip() for s in re.split(r"\n+", instructions_raw) if s.strip()]
-            else:
-                instructions = list(instructions_raw)
-            image = None
-            try:
-                image = scraper.image()
-            except Exception:
-                pass
-            total_time = None
-            try:
-                total_time = str(scraper.total_time()) + " min"
-            except Exception:
-                pass
-            servings = None
-            try:
-                servings = str(scraper.yields())
-            except Exception:
-                pass
-            recipe_data = {
-                "title": title,
-                "ingredients": ingredients,
-                "instructions": instructions,
-                "image_url": image,
-                "total_time": total_time,
-                "servings": servings,
-                "source_url": url,
-            }
+            recipe_data = _scrape_recipe_data(url)
         except Exception as exc:
+            log.warning("Import-url scrape failed for %s: %s", url, exc)
             return jsonify({"error": f"Could not scrape recipe: {exc}"}), 400
 
     # Step 2: save
@@ -854,8 +967,8 @@ def api_import_excel():
                     if img:
                         models.update_recipe_image(rid, img)
                     time.sleep(0.5)  # be polite to the server
-                except Exception:
-                    pass
+                except Exception as exc:
+                    log.warning("Excel-import image fetch failed for recipe %s (%s): %s", rid, url, exc)
         thread = threading.Thread(target=_fetch_images, args=(recipes_to_scrape,), daemon=True)
         thread.start()
 
@@ -1019,10 +1132,15 @@ def api_shopping_list():
     return jsonify(items)
 
 
+# Legacy data-fix endpoint with no UI caller. Gated to test mode so it can't
+# be hit on prod by accident; flip FLASK_TEST_MODE=1 temporarily if you ever
+# need to run it as a one-off cleanup.
 @app.route("/api/fix-instructions", methods=["POST"])
 @login_required_api
 def api_fix_instructions():
     """Re-split recipes that have all instructions in a single step."""
+    if not (IS_TEST_MODE or app.config.get("TESTING")):
+        return jsonify({"error": "Not available"}), 404
     user_id = session["user_id"]
     conn = models.get_db()
     rows = conn.execute("SELECT id, instructions FROM recipes WHERE user_id = ?", (user_id,)).fetchall()
@@ -1042,6 +1160,7 @@ def api_fix_instructions():
 
 @app.route("/api/generate-meal-plan", methods=["POST"])
 @login_required_api
+@limiter.limit("20 per hour")
 def api_generate_meal_plan():
     """Take an AI-generated meal_plan object, save all recipes, create calendar entries."""
     data = request.get_json(force=True)
@@ -1096,6 +1215,7 @@ def api_generate_meal_plan():
 
 @app.route("/api/modify-recipe", methods=["POST"])
 @login_required_api
+@limiter.limit("30 per hour")
 def api_modify_recipe():
     """Ask AI to modify an existing recipe based on a user request."""
     client = _get_gemini()
@@ -1137,7 +1257,7 @@ def api_modify_recipe():
 
     try:
         response = client.models.generate_content(
-            model="gemini-3-flash-preview",
+            model=GEMINI_MODEL,
             contents=[{"role": "user", "parts": [{"text": prompt}]}],
             config={
                 "system_instruction": system,
@@ -1160,6 +1280,7 @@ def api_modify_recipe():
 
 @app.route("/api/regenerate-recipe", methods=["POST"])
 @login_required_api
+@limiter.limit("30 per hour")
 def api_regenerate_recipe():
     """Ask AI to generate one replacement recipe for a specific meal slot."""
     client = _get_gemini()
@@ -1193,7 +1314,7 @@ def api_regenerate_recipe():
 
     try:
         response = client.models.generate_content(
-            model="gemini-3-flash-preview",
+            model=GEMINI_MODEL,
             contents=[{"role": "user", "parts": [{"text": prompt}]}],
             config={
                 "system_instruction": system,
@@ -1221,8 +1342,9 @@ def _scrape_image_url(url):
     if "gousto.co.uk" in url:
         try:
             slug = url.rstrip("/").split("/")[-1]
-            api_resp = requests.get(
-                f"https://production-api.gousto.co.uk/cmsreadbroker/v1/recipe/{slug}",
+            api_url = f"https://production-api.gousto.co.uk/cmsreadbroker/v1/recipe/{slug}"
+            api_resp = _safe_get(
+                api_url,
                 headers={"User-Agent": "Mozilla/5.0"},
                 timeout=10,
             )
@@ -1237,7 +1359,7 @@ def _scrape_image_url(url):
         return None
 
     try:
-        resp = requests.get(
+        resp = _safe_get(
             url,
             headers={
                 "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -1254,8 +1376,6 @@ def _scrape_image_url(url):
                 "Sec-Fetch-Site": "none",
                 "Sec-Fetch-User": "?1",
             },
-            timeout=15,
-            allow_redirects=True,
         )
         if resp.status_code >= 400:
             return None
@@ -1383,6 +1503,7 @@ Keep ingredient lists practical and instructions clear."""
 
 @app.route("/api/chat", methods=["POST"])
 @login_required_api
+@limiter.limit("60 per hour")
 def api_chat():
     client = _get_gemini()
     if client is None:
@@ -1414,7 +1535,7 @@ def api_chat():
 
     try:
         response = client.models.generate_content(
-            model="gemini-3-flash-preview",
+            model=GEMINI_MODEL,
             contents=contents,
             config={
                 "system_instruction": system,

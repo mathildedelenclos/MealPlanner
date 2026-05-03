@@ -15,7 +15,27 @@ def get_db():
     return conn
 
 
+_WAL_INITIALISED = False
+
+
+def _ensure_wal():
+    """Enable WAL mode once per process. Improves concurrent read/write
+    behaviour when background image-scrape threads write while the main
+    request thread reads."""
+    global _WAL_INITIALISED
+    if _WAL_INITIALISED:
+        return
+    try:
+        conn = sqlite3.connect(DB_PATH, timeout=10)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.close()
+        _WAL_INITIALISED = True
+    except Exception:
+        pass
+
+
 def init_db():
+    _ensure_wal()
     conn = get_db()
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS users (
@@ -268,6 +288,19 @@ def init_db():
         conn.execute("DELETE FROM settings WHERE key = 'gcal_sync'")
     except Exception:
         pass
+    # Indexes for the common WHERE patterns. CREATE INDEX IF NOT EXISTS is
+    # idempotent so this is safe to run on every startup.
+    for ddl in (
+        "CREATE INDEX IF NOT EXISTS idx_recipes_user ON recipes(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_calendar_user_date ON calendar_entries(user_id, entry_date)",
+        "CREATE INDEX IF NOT EXISTS idx_calendar_recipe ON calendar_entries(recipe_id)",
+        "CREATE INDEX IF NOT EXISTS idx_shopping_user_week ON custom_shopping_items(user_id, week_start)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email != ''",
+    ):
+        try:
+            conn.execute(ddl)
+        except Exception:
+            pass
     conn.commit()
     conn.close()
 
@@ -337,8 +370,15 @@ def get_user_by_id(user_id):
 
 
 def adopt_orphan_data(user_id):
-    """Assign all rows with user_id IS NULL to the given user. Called on first login."""
+    """Assign rows with user_id IS NULL to `user_id`, but ONLY for the very
+    first user to log in. Otherwise a second user would silently inherit
+    everything anonymous since the first user signed up — which can include
+    rows produced by code that forgets to set user_id."""
     conn = get_db()
+    user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    if user_count != 1:
+        conn.close()
+        return
     for table in ("recipes", "calendar_entries", "custom_shopping_items"):
         conn.execute(f"UPDATE {table} SET user_id = ? WHERE user_id IS NULL", (user_id,))
     conn.commit()

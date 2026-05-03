@@ -825,3 +825,105 @@ class TestMigrationRecovery:
         ).fetchone()
         conn.close()
         assert leftover is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pure-function unit tests (parsing, categorization, shopping merge)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestIngredientParsing:
+    def test_parse_metric_with_unit(self):
+        qty, unit, name = models._parse_ingredient("400g pasta")
+        assert qty == 400.0
+        assert unit == "g"
+        assert name == "pasta"
+
+    def test_parse_imperial_with_unit(self):
+        qty, unit, name = models._parse_ingredient("2 tbsp olive oil")
+        assert qty == 2.0
+        assert unit == "tbsp"
+        assert name == "olive oil"
+
+    def test_parse_plain_quantity(self):
+        qty, unit, name = models._parse_ingredient("3 onions")
+        assert qty == 3.0
+        assert unit is None
+        assert name == "onions"
+
+    def test_parse_fraction(self):
+        qty, _, _ = models._parse_ingredient("1/2 cup flour")
+        assert qty == 0.5
+
+    def test_parse_mixed_number(self):
+        qty, _, _ = models._parse_ingredient("1 1/2 cups water")
+        assert qty == 1.5
+
+    def test_parse_no_quantity(self):
+        qty, unit, name = models._parse_ingredient("salt and pepper")
+        assert qty is None
+        assert unit is None
+        assert name == "salt and pepper"
+
+    def test_normalise_pluralises_correctly(self):
+        assert models._normalise_name("onions") == "onion"
+        assert models._normalise_name("tomatoes") == "tomato"
+        assert models._normalise_name("berries") == "berry"
+        # Don't strip the trailing 's' from short names ("ss" guard)
+        assert models._normalise_name("glass") == "glass"
+
+    def test_normalise_strips_prep_notes(self):
+        assert models._normalise_name("garlic, minced") == "garlic"
+        assert models._normalise_name("aubergine, cut into 3cm chunks") == "aubergine"
+
+    def test_clean_strips_parenthetical(self):
+        assert models._clean_ingredient_name("onion (diced)") == "onion"
+        assert models._clean_ingredient_name("chicken thighs, boneless") == "chicken thighs"
+
+
+class TestCategorize:
+    @pytest.mark.parametrize("text,expected", [
+        ("400g chicken breast", "Meat & Fish"),
+        ("2 cloves garlic", "Fruits & Vegetables"),
+        ("1 tbsp olive oil", "Oils, Sauces & Condiments"),
+        ("100g cheddar", "Dairy & Eggs"),
+        ("400g chopped tomatoes", "Tins & Jars"),
+        ("200g spaghetti", "Pasta, Rice & Grains"),
+        ("2 tsp paprika", "Herbs, Spices & Seasonings"),
+        ("4 slices bread", "Bakery & Bread"),
+        ("xkcd magic dust", "Other"),
+    ])
+    def test_categorize(self, text, expected):
+        assert models.categorize_ingredient(text) == expected
+
+
+class TestShoppingListMerge:
+    def test_merges_same_unit(self, user):
+        rid1 = models.create_recipe(user["id"], title="A", ingredients=["200g pasta"], instructions=[], servings="2")
+        rid2 = models.create_recipe(user["id"], title="B", ingredients=["300g pasta"], instructions=[], servings="2")
+        from datetime import date as _d
+        models.add_calendar_entry(user["id"], _d.today().isoformat(), "lunch", recipe_id=rid1, servings=2)
+        models.add_calendar_entry(user["id"], _d.today().isoformat(), "dinner", recipe_id=rid2, servings=2)
+        items = models.get_shopping_list_for_range(user["id"], _d.today().isoformat(), _d.today().isoformat())
+        pasta = [i for i in items if "pasta" in i["text"]]
+        assert len(pasta) == 1
+        assert pasta[0]["text"] == "500 g pasta"
+        assert sorted(pasta[0]["recipes"]) == ["A", "B"]
+
+    def test_keeps_different_units_separate(self, user):
+        rid1 = models.create_recipe(user["id"], title="A", ingredients=["400g tomatoes"], instructions=[], servings="2")
+        rid2 = models.create_recipe(user["id"], title="B", ingredients=["1 can tomatoes"], instructions=[], servings="2")
+        from datetime import date as _d
+        models.add_calendar_entry(user["id"], _d.today().isoformat(), "lunch", recipe_id=rid1, servings=2)
+        models.add_calendar_entry(user["id"], _d.today().isoformat(), "dinner", recipe_id=rid2, servings=2)
+        items = models.get_shopping_list_for_range(user["id"], _d.today().isoformat(), _d.today().isoformat())
+        tomato_items = [i for i in items if "tomato" in i["text"].lower()]
+        # 400g tomatoes and "1 can tomatoes" stay separate (different units)
+        assert len(tomato_items) == 2
+
+    def test_scales_by_planned_servings(self, user):
+        rid = models.create_recipe(user["id"], title="Pasta", ingredients=["200g pasta"], instructions=[], servings="2 servings")
+        from datetime import date as _d
+        # Plan it for 4 servings — should scale to 400g
+        models.add_calendar_entry(user["id"], _d.today().isoformat(), "dinner", recipe_id=rid, servings=4)
+        items = models.get_shopping_list_for_range(user["id"], _d.today().isoformat(), _d.today().isoformat())
+        assert items[0]["text"] == "400 g pasta"

@@ -674,7 +674,7 @@ async function openRecipeModal(id, entryId, plannedServings) {
     body.innerHTML = `
         ${r.image_url ? `<img class="modal-recipe-image" src="${r.image_url}" alt="">` : ""}
         <h2 class="modal-recipe-title">${escHtml(r.title)}</h2>
-        <p class="modal-recipe-meta">${r.total_time || ""} ${servingsLabel} ${r.source_url ? `· <a href="${r.source_url}" target="_blank">${t("recipes.source")}</a>` : ""}</p>
+        <p class="modal-recipe-meta">${r.total_time || ""} ${servingsLabel} ${safeUrl(r.source_url) ? `· <a href="${safeUrl(r.source_url)}" target="_blank" rel="noopener noreferrer">${t("recipes.source")}</a>` : ""}</p>
         <div class="modal-actions">
             ${cookBtn}
             <button class="btn btn-ghost btn-small ai-modify-toggle" id="btn-ai-modify-toggle">✨ ${t("recipes.modifyWithAI")}</button>
@@ -2522,7 +2522,7 @@ async function sendChat() {
                             <div class="recipe-img-shimmer"></div>
                         </div>
                         <h4>${escHtml(r.title)}</h4>
-                        <p class="meta">${r.total_time || ""} ${r.servings ? "· " + r.servings : ""}${r.source_url ? ` · <a href="${r.source_url}" target="_blank">${t("recipes.source")}</a>` : ""}</p>
+                        <p class="meta">${r.total_time || ""} ${r.servings ? "· " + r.servings : ""}${safeUrl(r.source_url) ? ` · <a href="${safeUrl(r.source_url)}" target="_blank" rel="noopener noreferrer">${t("recipes.source")}</a>` : ""}</p>
                         <details><summary>${t("recipes.ingredients")}</summary>
                             <ul>${(r.ingredients || []).map((i) => `<li>${escHtml(i)}</li>`).join("")}</ul>
                         </details>
@@ -2559,7 +2559,10 @@ async function sendChat() {
                     fetchRecipeImage(r.source_url,
                         (url) => {
                             r.image_url = url;
-                            if (wrap) wrap.innerHTML = `<img class="recipe-suggestion-img" src="${url}" alt="" onerror="this.parentElement.remove()">`;
+                            if (wrap) {
+                                wrap.innerHTML = `<img class="recipe-suggestion-img" src="${escHtml(url)}" alt="" data-hide-on-error="1">`;
+                                bindImageHideOnError(wrap);
+                            }
                         },
                         () => { if (wrap) wrap.remove(); }
                     );
@@ -2731,7 +2734,7 @@ function openChatRecipeModal(recipe) {
     const r = recipe;
     const hasMethods = r.instructions && r.instructions.length > 0;
     const imgHtml = r.image_url
-        ? `<div class="chat-modal-img-wrap"><img src="${r.image_url}" alt="" onerror="this.parentElement.remove()"></div>`
+        ? `<div class="chat-modal-img-wrap"><img src="${escHtml(r.image_url)}" alt="" data-hide-on-error="1"></div>`
         : (r.source_url ? `<div class="chat-modal-img-wrap"><div class="recipe-img-shimmer" style="height:220px"></div></div>` : "");
     const overlay = document.createElement("div");
     overlay.className = "chat-recipe-modal";
@@ -2740,7 +2743,7 @@ function openChatRecipeModal(recipe) {
             <button class="chat-recipe-modal-close">&times;</button>
             ${imgHtml}
             <h3>${escHtml(r.title)}</h3>
-            <p class="meta">${r.total_time || ""}${r.servings ? " · " + r.servings : ""}${r.source_url ? ` · <a href="${r.source_url}" target="_blank">${t("recipes.source")}</a>` : ""}</p>
+            <p class="meta">${r.total_time || ""}${r.servings ? " · " + r.servings : ""}${safeUrl(r.source_url) ? ` · <a href="${safeUrl(r.source_url)}" target="_blank" rel="noopener noreferrer">${t("recipes.source")}</a>` : ""}</p>
             ${r.categories && r.categories.length ? `<div style="margin-bottom:12px">${r.categories.map(c => `<span class="category-pill" style="font-size:11px;padding:2px 8px;margin-right:4px">${escHtml(c)}</span>`).join("")}</div>` : ""}
             <h4>${t("recipes.ingredients")}</h4>
             <ul>${(r.ingredients || []).map(i => `<li>${escHtml(i)}</li>`).join("")}</ul>
@@ -2749,6 +2752,7 @@ function openChatRecipeModal(recipe) {
             ${hasMethods ? `<div style="margin-top:16px"><button class="btn btn-start-cooking btn-small chat-start-cooking">🍳 ${t("recipes.startCooking")}</button></div>` : ""}
         </div>`;
     document.body.appendChild(overlay);
+    bindImageHideOnError(overlay);
     overlay.querySelector(".chat-recipe-modal-close").addEventListener("click", () => overlay.remove());
     overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
     // If image not yet loaded, fetch it now
@@ -2757,7 +2761,10 @@ function openChatRecipeModal(recipe) {
             (url) => {
                 r.image_url = url;
                 const wrap = overlay.querySelector(".chat-modal-img-wrap");
-                if (wrap) wrap.innerHTML = `<img src="${url}" alt="" onerror="this.parentElement.remove()">`;
+                if (wrap) {
+                    wrap.innerHTML = `<img src="${escHtml(url)}" alt="" data-hide-on-error="1">`;
+                    bindImageHideOnError(wrap);
+                }
             },
             () => {
                 const wrap = overlay.querySelector(".chat-modal-img-wrap");
@@ -3008,6 +3015,26 @@ function escHtml(str) {
     const div = document.createElement("div");
     div.textContent = str;
     return div.innerHTML;
+}
+
+// Returns an HTML-attribute-safe URL only if the scheme is http(s).
+// Anything else (javascript:, data:, vbscript:) becomes empty so it can't
+// execute when injected into href/src attributes.
+function safeUrl(url) {
+    if (!url) return "";
+    const s = String(url).trim();
+    if (!/^https?:\/\//i.test(s)) return "";
+    return escHtml(s);
+}
+
+// Hooks `onerror = removeParent` onto every <img data-hide-on-error="1">
+// inside `root`. Avoids inline event handlers (CSP-friendly).
+function bindImageHideOnError(root) {
+    (root || document).querySelectorAll('img[data-hide-on-error="1"]').forEach((img) => {
+        img.addEventListener("error", () => {
+            if (img.parentElement) img.parentElement.remove();
+        });
+    });
 }
 
 function formatDates(dates) {

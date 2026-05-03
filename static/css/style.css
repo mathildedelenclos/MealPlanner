@@ -432,6 +432,10 @@ body {
     font-weight: 500;
     max-width: calc(100% - 32px);
     animation: fadeIn 0.2s ease;
+    /* The banner overlaps the bottom of the calendar grid on mobile. Let
+       taps pass through the banner background so the user can still tap
+       the +Add buttons underneath; only the Done button captures clicks. */
+    pointer-events: none;
 }
 .copy-mode-banner .copy-mode-cancel {
     background: rgba(255,255,255,0.18);
@@ -442,6 +446,7 @@ body {
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
+    pointer-events: auto;
 }
 .copy-mode-banner .copy-mode-cancel:hover {
     background: rgba(255,255,255,0.28);
