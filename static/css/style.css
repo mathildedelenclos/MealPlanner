@@ -2111,7 +2111,7 @@ li.category-hidden {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
 }
 .calendar-nav h3 {
     font-size: 20px;
@@ -2163,7 +2163,7 @@ li.category-hidden {
 .cal-week-grid-inner {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
 }
 
 /* Day row */
@@ -2205,7 +2205,7 @@ li.category-hidden {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 12px 8px;
+    padding: 8px;
     background: linear-gradient(180deg, var(--bg) 0%, #eef0f7 100%);
     border-right: 1px solid var(--border);
     border-radius: calc(var(--radius) - 1px) 0 0 calc(var(--radius) - 1px);
@@ -2220,9 +2220,9 @@ li.category-hidden {
     color: var(--text-muted);
 }
 .cal-week-date-num {
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 700;
-    line-height: 1.2;
+    line-height: 1.15;
     color: var(--text);
 }
 .cal-week-month-name {
@@ -2238,43 +2238,43 @@ li.category-hidden {
     flex: 1;
     display: flex;
     min-width: 0;
-    min-height: 80px;
+    min-height: 64px;
 }
 
 /* Meal slots in week view */
 .calendar-week-grid .cal-meal-slot {
     flex: 1;
     min-width: 0;
-    padding: 12px 14px;
+    padding: 8px 12px;
     border-radius: 0;
     min-height: auto;
     border: none;
     border-left: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
 }
 .calendar-week-grid .cal-meal-slot:first-child {
     border-left: none;
 }
 .calendar-week-grid .cal-meal-label {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
     text-transform: none;
     letter-spacing: 0.01em;
     color: var(--text-muted);
-    margin-bottom: 2px;
+    margin-bottom: 0;
 }
 .cal-meal-slot[data-meal="lunch"] > .cal-meal-label::before  { content: "🥗 "; }
 .cal-meal-slot[data-meal="dinner"] > .cal-meal-label::before { content: "🍝 "; }
 
 /* Entry chips in week view */
 .calendar-week-grid .cal-entry {
-    padding: 6px 10px 6px 12px;
+    padding: 5px 8px 5px 10px;
     font-size: 13px;
     border-radius: 8px;
     gap: 6px;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 .calendar-week-grid .cal-entry-link {
     font-size: 13px;
@@ -2297,8 +2297,8 @@ li.category-hidden {
 .calendar-week-grid .cal-add-btn {
     width: auto;
     align-self: stretch;
-    padding: 7px 0;
-    font-size: 14px;
+    padding: 4px 0;
+    font-size: 13px;
     font-weight: 500;
     color: var(--text-muted);
     background: transparent;
