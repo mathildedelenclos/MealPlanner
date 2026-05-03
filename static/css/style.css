@@ -3043,8 +3043,6 @@ li.category-hidden {
     .calendar-week-grid .cal-entry-copy,
     .calendar-week-grid .cal-entry-remove { font-size: 13px; padding: 2px 4px; min-width: 20px; }
     .calendar-week-grid .cal-add-btn { padding: 2px 0; font-size: 11px; }
-    /* Hide the +Add placeholder once a slot has an entry — tap the slot to add more */
-    .calendar-week-grid .cal-meal-slot:has(.cal-entry) .cal-add-btn { display: none; }
     .cal-week-grid-inner { gap: 3px; }
 
     /* ── Settings ── */
