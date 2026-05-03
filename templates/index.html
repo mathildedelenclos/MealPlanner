@@ -267,37 +267,12 @@
 
     </main>
 
-    <!-- ═══ PRE-COOK TIME PICKER ═══ -->
-    <div id="precook-screen" class="precook-screen hidden">
-        <div class="precook-card">
-            <h2 id="precook-title"></h2>
-            <p class="precook-duration" id="precook-duration"></p>
-            <div class="precook-time-section">
-                <label class="precook-label">🕐 <span data-i18n="precook.readyTime">What time should it be ready?</span></label>
-                <input type="time" id="precook-time-input" class="precook-time-input">
-                <div class="precook-result hidden" id="precook-result">
-                    <span class="precook-start-icon">⏰</span>
-                    <span><span data-i18n="precook.startAt">Start cooking at </span><strong id="precook-start-time"></strong></span>
-                </div>
-                <p class="precook-no-time-hint" id="precook-no-time-hint" data-i18n="precook.skipHint">Optional — skip if you don't need a timer</p>
-            </div>
-            <div class="precook-actions">
-                <button class="btn btn-primary precook-go" id="precook-go">🍳 <span data-i18n="precook.letsGo">Let's Cook!</span></button>
-                <button class="btn btn-ghost" id="precook-cancel" data-i18n="common.cancel">Cancel</button>
-            </div>
-        </div>
-    </div>
-
     <!-- ═══ COOKING MODE (full-screen overlay) ═══ -->
     <div id="cooking-mode" class="cooking-mode hidden">
         <div class="cooking-topbar">
             <button class="btn cooking-exit" id="cooking-exit">✕ <span data-i18n="cooking.exit">Exit</span></button>
             <div class="cooking-title" id="cooking-title"></div>
             <div class="cooking-topbar-right">
-                <div class="cooking-start-time hidden" id="cooking-start-time" title="When you should have started">
-                    <span class="cooking-start-time-icon">⏰</span>
-                    <span id="cooking-start-time-text"></span>
-                </div>
                 <button class="btn cooking-toggle-ingredients" id="cooking-toggle-ingredients">📝 <span data-i18n="cooking.ingredients">Ingredients</span></button>
                 <span class="cooking-wake-lock" id="cooking-wake-lock" title="Screen will stay on">🔒 <span data-i18n="cooking.screenOn">Screen On</span></span>
             </div>

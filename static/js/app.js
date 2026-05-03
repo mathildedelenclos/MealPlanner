@@ -713,7 +713,7 @@ async function openRecipeModal(id, entryId, plannedServings) {
     if (cookingBtn) {
         cookingBtn.addEventListener("click", () => {
             hide($("#recipe-modal"));
-            showPrecookScreen(r, plannedServings);
+            enterCookingMode(r, plannedServings);
         });
     }
 
@@ -2769,7 +2769,7 @@ function openChatRecipeModal(recipe) {
     if (chatCookBtn) {
         chatCookBtn.addEventListener("click", () => {
             overlay.remove();
-            showPrecookScreen(r);
+            enterCookingMode(r);
         });
     }
 }
@@ -2781,7 +2781,6 @@ function openChatRecipeModal(recipe) {
 let cookingRecipe = null;
 let cookingStep = 0;
 let cookingWakeLock = null;
-let cookingStartTimeStr = null;
 
 // ── Parse total_time string into minutes ──
 function parseTotalTimeMinutes(timeStr) {
@@ -2801,102 +2800,6 @@ function parseTotalTimeMinutes(timeStr) {
     }
     return totalMins > 0 ? Math.round(totalMins) : null;
 }
-
-function formatTimeHHMM(date) {
-    return date.toLocaleTimeString(getLocale(), { hour: '2-digit', minute: '2-digit' });
-}
-
-// ── Pre-cook screen ──
-let pendingCookRecipe = null;
-let pendingCookServings = null;
-
-function showPrecookScreen(recipe, plannedServings) {
-    pendingCookRecipe = recipe;
-    pendingCookServings = plannedServings || null;
-    cookingStartTimeStr = null;
-
-    $("#precook-title").textContent = recipe.title;
-
-    const mins = parseTotalTimeMinutes(recipe.total_time);
-    if (mins) {
-        const h = Math.floor(mins / 60);
-        const m = mins % 60;
-        const durStr = h > 0 ? `${h}h ${m > 0 ? m + 'min' : ''}` : `${m} min`;
-        $("#precook-duration").textContent = "⏱ " + t("precook.totalTime", { duration: durStr });
-        $("#precook-duration").style.display = "";
-    } else {
-        $("#precook-duration").textContent = "⏱ " + t("precook.noTime");
-        $("#precook-duration").style.display = "";
-    }
-
-    const defaultReady = new Date(Date.now() + (mins || 60) * 60000);
-    defaultReady.setMinutes(Math.ceil(defaultReady.getMinutes() / 15) * 15, 0, 0);
-    const hh = String(defaultReady.getHours()).padStart(2, '0');
-    const mm = String(defaultReady.getMinutes()).padStart(2, '0');
-    $("#precook-time-input").value = `${hh}:${mm}`;
-
-    updatePrecookResult();
-
-    show($("#precook-screen"));
-    $("#precook-time-input").focus();
-}
-
-function updatePrecookResult() {
-    const timeVal = $("#precook-time-input").value;
-    const mins = parseTotalTimeMinutes(pendingCookRecipe?.total_time);
-    const resultEl = $("#precook-result");
-    const hintEl = $("#precook-no-time-hint");
-
-    if (!timeVal || !mins) {
-        hide(resultEl);
-        hintEl.textContent = mins ? t("precook.pickTimeHint") : t("precook.noTimeHint");
-        show(hintEl);
-        cookingStartTimeStr = null;
-        return;
-    }
-
-    const [h, m] = timeVal.split(':').map(Number);
-    const now = new Date();
-    const readyBy = new Date();
-    readyBy.setHours(h, m, 0, 0);
-    if (readyBy <= now) readyBy.setDate(readyBy.getDate() + 1);
-
-    const startAt = new Date(readyBy.getTime() - mins * 60000);
-    cookingStartTimeStr = formatTimeHHMM(startAt);
-
-    $("#precook-start-time").textContent = cookingStartTimeStr;
-    hide(hintEl);
-
-    if (startAt < now) {
-        resultEl.classList.add("precook-result--late");
-        const lateByMins = Math.round((now - startAt) / 60000);
-        $("#precook-start-time").textContent = t("precook.lateStart", { time: cookingStartTimeStr, mins: lateByMins });
-    } else {
-        resultEl.classList.remove("precook-result--late");
-        const inMins = Math.round((startAt - now) / 60000);
-        if (inMins > 0) {
-            $("#precook-start-time").textContent = t("precook.inMinutes", { time: cookingStartTimeStr, mins: inMins });
-        }
-    }
-    show(resultEl);
-}
-
-$("#precook-time-input").addEventListener("input", updatePrecookResult);
-
-$("#precook-go").addEventListener("click", () => {
-    if (!pendingCookRecipe) return;
-    hide($("#precook-screen"));
-    enterCookingMode(pendingCookRecipe, pendingCookServings);
-    pendingCookRecipe = null;
-    pendingCookServings = null;
-});
-
-$("#precook-cancel").addEventListener("click", () => {
-    hide($("#precook-screen"));
-    pendingCookRecipe = null;
-    pendingCookServings = null;
-    cookingStartTimeStr = null;
-});
 
 function enterCookingMode(recipe, plannedServings) {
     if (!recipe || !recipe.instructions || recipe.instructions.length === 0) {
@@ -2935,31 +2838,6 @@ function enterCookingMode(recipe, plannedServings) {
     hide($("#cooking-ingredients-panel"));
     $("#cooking-toggle-ingredients").classList.remove("active");
 
-    const startBanner = $("#cooking-start-time");
-    if (cookingStartTimeStr) {
-        $("#cooking-start-time-text").textContent = t("precook.startAtSimple", { time: cookingStartTimeStr });
-        const mins = parseTotalTimeMinutes(recipe.total_time);
-        const timeVal = $("#precook-time-input").value;
-        if (timeVal && mins) {
-            const [h, m] = timeVal.split(':').map(Number);
-            const readyBy = new Date();
-            readyBy.setHours(h, m, 0, 0);
-            if (readyBy <= new Date()) readyBy.setDate(readyBy.getDate() + 1);
-            const startAt = new Date(readyBy.getTime() - mins * 60000);
-            if (startAt < new Date()) {
-                startBanner.classList.add("is-late");
-                $("#cooking-start-time-text").textContent = t("precook.readyByNow", { time: timeVal });
-            } else {
-                startBanner.classList.remove("is-late");
-                $("#cooking-start-time-text").textContent = t("precook.startAtBanner", { start: cookingStartTimeStr, ready: timeVal });
-            }
-        }
-        show(startBanner);
-    } else {
-        hide(startBanner);
-        startBanner.classList.remove("is-late");
-    }
-
     renderCookingSteps();
 
     show($("#cooking-mode"));
@@ -2975,7 +2853,6 @@ function exitCookingMode() {
     document.body.style.overflow = "";
     cookingRecipe = null;
     cookingStep = 0;
-    cookingStartTimeStr = null;
 
     releaseWakeLock();
 

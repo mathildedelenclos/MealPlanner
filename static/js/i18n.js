@@ -205,21 +205,6 @@ const TRANSLATIONS = {
     "cooking.hint": "Use \u2190 \u2192 arrow keys or swipe to navigate",
     "cooking.noSteps": "This recipe has no steps to cook!",
 
-    // Pre-cook
-    "precook.readyTime": "What time should it be ready?",
-    "precook.totalTime": "Total time: {{duration}}",
-    "precook.noTime": "No cook time specified",
-    "precook.startAt": "Start cooking at ",
-    "precook.skipHint": "Optional \u2014 skip if you don't need a timer",
-    "precook.pickTimeHint": "Pick a time above, or skip",
-    "precook.noTimeHint": "No cook time on this recipe \u2014 you can still set a target",
-    "precook.letsGo": "Let's Cook!",
-    "precook.lateStart": "{{time}} ({{mins}} min ago \u2014 start now!)",
-    "precook.inMinutes": "{{time}} (in {{mins}} min)",
-    "precook.startAtBanner": "Start at {{start}} \u00B7 Ready by {{ready}}",
-    "precook.readyByNow": "Ready by {{time}} \u2014 start now!",
-    "precook.startAtSimple": "Start at {{time}}",
-
     // Common
     "common.cancel": "Cancel",
     "common.done": "Done",
@@ -428,21 +413,6 @@ const TRANSLATIONS = {
     "cooking.done": "Termin\u00e9\u00a0!",
     "cooking.hint": "Utilisez les touches \u2190 \u2192 ou balayez pour naviguer",
     "cooking.noSteps": "Cette recette n'a pas d'\u00e9tapes de pr\u00e9paration\u00a0!",
-
-    // Pre-cook
-    "precook.readyTime": "\u00c0 quelle heure doit-ce \u00eatre pr\u00eat\u00a0?",
-    "precook.totalTime": "Temps total\u00a0: {{duration}}",
-    "precook.noTime": "Pas de temps de cuisson sp\u00e9cifi\u00e9",
-    "precook.startAt": "Commencer \u00e0 cuisiner \u00e0 ",
-    "precook.skipHint": "Facultatif \u2014 passez si vous n'avez pas besoin de minuteur",
-    "precook.pickTimeHint": "Choisissez une heure ci-dessus, ou passez",
-    "precook.noTimeHint": "Pas de temps de cuisson \u2014 vous pouvez quand m\u00eame d\u00e9finir un objectif",
-    "precook.letsGo": "C'est parti\u00a0!",
-    "precook.lateStart": "{{time}} (il y a {{mins}} min \u2014 commencez maintenant\u00a0!)",
-    "precook.inMinutes": "{{time}} (dans {{mins}} min)",
-    "precook.startAtBanner": "Commencer \u00e0 {{start}} \u00b7 Pr\u00eat \u00e0 {{ready}}",
-    "precook.readyByNow": "Pr\u00eat \u00e0 {{time}} \u2014 commencez maintenant\u00a0!",
-    "precook.startAtSimple": "Commencer \u00e0 {{time}}",
 
     // Common
     "common.cancel": "Annuler",

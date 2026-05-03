@@ -1806,6 +1806,7 @@ li.category-hidden {
     display: flex;
     flex: 1;
     overflow: hidden;
+    position: relative;
 }
 
 /* Ingredients panel */
@@ -1932,138 +1933,6 @@ li.category-hidden {
 .btn-start-cooking:hover {
     background: #16a34a;
 }
-
-/* ── Pre-cook time picker screen ── */
-.precook-screen {
-    position: fixed;
-    inset: 0;
-    z-index: 9998;
-    background: rgba(0,0,0,.55);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    animation: fadeIn .2s ease;
-}
-
-.precook-card {
-    background: var(--card-bg);
-    border-radius: 16px;
-    padding: 36px 40px;
-    max-width: 440px;
-    width: 92%;
-    box-shadow: 0 20px 50px rgba(0,0,0,.25);
-    text-align: center;
-}
-
-.precook-card h2 {
-    font-size: 20px;
-    font-weight: 700;
-    margin-bottom: 6px;
-}
-
-.precook-duration {
-    color: var(--text-muted);
-    font-size: 14px;
-    margin-bottom: 24px;
-}
-
-.precook-time-section {
-    background: var(--bg);
-    border-radius: 12px;
-    padding: 20px;
-    margin-bottom: 24px;
-}
-
-.precook-label {
-    display: block;
-    font-size: 15px;
-    font-weight: 600;
-    margin-bottom: 12px;
-    color: var(--text);
-}
-
-.precook-time-input {
-    font-family: inherit;
-    font-size: 28px;
-    font-weight: 600;
-    padding: 10px 20px;
-    border: 2px solid var(--border);
-    border-radius: 12px;
-    background: var(--card-bg);
-    color: var(--text);
-    text-align: center;
-    width: 180px;
-    transition: border-color .15s;
-}
-.precook-time-input:focus {
-    outline: none;
-    border-color: var(--primary);
-}
-
-.precook-result {
-    margin-top: 16px;
-    padding: 12px 16px;
-    background: #ecfdf5;
-    border: 1px solid #a7f3d0;
-    border-radius: 10px;
-    font-size: 16px;
-    color: #065f46;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    animation: fadeIn .2s ease;
-}
-.precook-result.precook-result--late {
-    background: #fef2f2;
-    border-color: #fecaca;
-    color: #991b1b;
-}
-
-.precook-start-icon {
-    font-size: 20px;
-}
-
-.precook-no-time-hint {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-top: 10px;
-    margin-bottom: 0;
-}
-
-.precook-actions {
-    display: flex;
-    gap: 12px;
-    justify-content: center;
-}
-
-.precook-go {
-    background: #22c55e;
-    padding: 12px 32px;
-    font-size: 16px;
-}
-.precook-go:hover { background: #16a34a; }
-
-/* Start-time banner in cooking topbar */
-.cooking-start-time {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    background: #1a3a2a;
-    border: 1px solid #22c55e44;
-    color: #86efac;
-    font-size: 13px;
-    font-weight: 600;
-    padding: 5px 12px;
-    border-radius: 8px;
-    white-space: nowrap;
-}
-.cooking-start-time.is-late {
-    background: #3a1a1a;
-    border-color: #ef444444;
-    color: #fca5a5;
-}
-.cooking-start-time-icon { font-size: 14px; }
 
 /* Responsive cooking mode */
 @media (max-width: 768px) {
@@ -3058,9 +2927,6 @@ li.category-hidden {
     .btn-small { min-height: 36px; }
     .input, .textarea { font-size: 16px; }
     select.input-select { font-size: 16px; }
-
-    /* ── Precook screen ── */
-    .precook-card { padding: 24px 20px; }
 
     /* ── Chat recipe modal ── */
     .chat-recipe-modal-body {
