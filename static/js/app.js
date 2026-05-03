@@ -29,6 +29,41 @@ const show = (el) => el.classList.remove("hidden");
 const hide = (el) => el.classList.add("hidden");
 const IS_TOUCH = window.matchMedia("(hover: none)").matches;
 
+// iOS-friendly body scroll lock: pin body via position:fixed so the page
+// behind a modal can't scroll and Safari can't end up zoomed/offset on close.
+let _lockedScrollY = 0;
+function lockBodyScroll() {
+    if (document.body.dataset.scrollLocked === "1") return;
+    _lockedScrollY = window.scrollY;
+    document.body.dataset.scrollLocked = "1";
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${_lockedScrollY}px`;
+    document.body.style.left = "0";
+    document.body.style.right = "0";
+    document.body.style.width = "100%";
+}
+function unlockBodyScroll() {
+    if (document.body.dataset.scrollLocked !== "1") return;
+    delete document.body.dataset.scrollLocked;
+    document.body.style.position = "";
+    document.body.style.top = "";
+    document.body.style.left = "";
+    document.body.style.right = "";
+    document.body.style.width = "";
+    window.scrollTo(0, _lockedScrollY);
+}
+
+// Watch the recipe modal so any code path that opens/closes it locks scroll.
+document.addEventListener("DOMContentLoaded", () => {
+    const recipeModal = document.getElementById("recipe-modal");
+    if (!recipeModal) return;
+    const sync = () => {
+        if (recipeModal.classList.contains("hidden")) unlockBodyScroll();
+        else lockBodyScroll();
+    };
+    new MutationObserver(sync).observe(recipeModal, { attributes: true, attributeFilter: ["class"] });
+});
+
 // ═══════════════════════════════════
 // Navigation (URL-based routing)
 // ═══════════════════════════════════
@@ -625,7 +660,8 @@ async function openRecipeModal(id, entryId, plannedServings) {
         : "";
 
     const actionBtn = entryId
-        ? `<button class="btn btn-danger btn-small" id="btn-remove-entry-modal" data-entry-id="${entryId}">${t("recipes.removeFromCalendar")}</button>`
+        ? `<button class="btn btn-secondary btn-small" id="btn-edit-recipe-modal">✏️ ${t("recipes.edit")}</button>
+           <button class="btn btn-danger btn-small" id="btn-remove-entry-modal" data-entry-id="${entryId}">${t("recipes.removeFromCalendar")}</button>`
         : `<button class="btn btn-primary btn-small" id="btn-add-to-calendar-modal">📅 ${t("calendar.addToCalendar")}</button>
            <button class="btn btn-secondary btn-small" id="btn-edit-recipe-modal">✏️ ${t("recipes.edit")}</button>
            <button class="btn btn-danger btn-small" onclick="deleteRecipe(${r.id})">${t("recipes.deleteRecipe")}</button>`;
@@ -934,6 +970,7 @@ async function showEditRecipeForm(recipe) {
 
         openRecipeModal(recipe.id);
         loadRecipes();
+        if (!$("#view-meal-plans").classList.contains("hidden")) loadCalendar();
     });
 }
 
