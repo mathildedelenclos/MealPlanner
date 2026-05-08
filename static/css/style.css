@@ -3156,13 +3156,21 @@ li.category-hidden {
         margin: 0;
         border-radius: 0;
         padding: calc(env(safe-area-inset-top) + 56px + 16px) 20px calc(env(safe-area-inset-bottom) + 24px);
+        /* Subtle warm tint so the page feels less clinical than plain white */
+        background:
+            radial-gradient(120% 60% at 0% 0%, rgba(194, 114, 90, .14), transparent 60%),
+            radial-gradient(120% 60% at 100% 100%, rgba(217, 162, 87, .10), transparent 60%),
+            #fbf3e8;
     }
     #recipe-modal .modal-header {
         position: fixed;
         top: 0; left: 0; right: 0;
         height: calc(env(safe-area-inset-top) + 56px);
         padding: env(safe-area-inset-top) 8px 0;
-        background: var(--card-bg);
+        /* Match the warm tint and let it blur slightly under scroll */
+        background: rgba(251, 243, 232, .92);
+        backdrop-filter: saturate(140%) blur(8px);
+        -webkit-backdrop-filter: saturate(140%) blur(8px);
         border-bottom: 1px solid var(--border);
         display: flex;
         align-items: center;

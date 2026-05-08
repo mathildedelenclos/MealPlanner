@@ -290,6 +290,11 @@ def manifest():
     return send_from_directory("static", "manifest.json", mimetype="application/manifest+json")
 
 
+@app.route("/favicon.ico")
+def favicon():
+    return send_from_directory("static", "favicon.ico", mimetype="image/vnd.microsoft.icon")
+
+
 # ──────────────────────────────────────
 # Pages
 # ──────────────────────────────────────

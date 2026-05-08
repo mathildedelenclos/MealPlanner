@@ -1,5 +1,5 @@
 // Service Worker – Meal Planner PWA
-const CACHE_NAME = "meal-planner-v5";
+const CACHE_NAME = "meal-planner-v8";
 const PRECACHE = [
     "/",
     "/calendar",
@@ -8,6 +8,10 @@ const PRECACHE = [
     "/static/js/i18n.js",
     "/static/icons/icon-192x192.png",
     "/static/icons/icon-512x512.png",
+    "/static/icons/apple-touch-icon.png",
+    "/static/favicon-16.png",
+    "/static/favicon-32.png",
+    "/static/favicon.ico",
 ];
 
 // Install: pre-cache essential assets (incl. /calendar HTML for offline navigation)
