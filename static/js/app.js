@@ -121,8 +121,31 @@ $$(".nav-link").forEach((link) => {
     link.addEventListener("click", (e) => {
         e.preventDefault();
         navigateToView(link.dataset.view);
+        closeNavDrawer();
     });
 });
+
+// ── Mobile nav drawer (hamburger) ──
+function setNavDrawer(open) {
+    const sidebar = document.getElementById("sidebar-nav");
+    const backdrop = document.getElementById("nav-backdrop");
+    const btn = document.getElementById("btn-nav-hamburger");
+    if (!sidebar || !backdrop || !btn) return;
+    sidebar.classList.toggle("open", open);
+    backdrop.classList.toggle("open", open);
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+}
+function closeNavDrawer() { setNavDrawer(false); }
+(() => {
+    const btn = document.getElementById("btn-nav-hamburger");
+    const backdrop = document.getElementById("nav-backdrop");
+    if (btn) btn.addEventListener("click", () => {
+        const isOpen = btn.getAttribute("aria-expanded") === "true";
+        setNavDrawer(!isOpen);
+    });
+    if (backdrop) backdrop.addEventListener("click", closeNavDrawer);
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeNavDrawer(); });
+})();
 
 // Handle browser back/forward
 window.addEventListener("popstate", (e) => {
@@ -660,11 +683,11 @@ async function openRecipeModal(id, entryId, plannedServings) {
         : "";
 
     const actionBtn = entryId
-        ? `<button class="btn btn-secondary btn-small" id="btn-edit-recipe-modal">✏️ ${t("recipes.edit")}</button>
-           <button class="btn btn-danger btn-small" id="btn-remove-entry-modal" data-entry-id="${entryId}">${t("recipes.removeFromCalendar")}</button>`
+        ? `<button class="btn btn-secondary btn-small modal-secondary-action" id="btn-edit-recipe-modal">✏️ ${t("recipes.edit")}</button>
+           <button class="btn btn-danger btn-small modal-secondary-action" id="btn-remove-entry-modal" data-entry-id="${entryId}">${t("recipes.removeFromCalendar")}</button>`
         : `<button class="btn btn-primary btn-small" id="btn-add-to-calendar-modal">📅 ${t("calendar.addToCalendar")}</button>
-           <button class="btn btn-secondary btn-small" id="btn-edit-recipe-modal">✏️ ${t("recipes.edit")}</button>
-           <button class="btn btn-danger btn-small" onclick="deleteRecipe(${r.id})">${t("recipes.deleteRecipe")}</button>`;
+           <button class="btn btn-secondary btn-small modal-secondary-action" id="btn-edit-recipe-modal">✏️ ${t("recipes.edit")}</button>
+           <button class="btn btn-danger btn-small modal-secondary-action" id="btn-delete-recipe-modal">🗑 ${t("recipes.deleteRecipe")}</button>`;
 
     const hasMethods = r.instructions && r.instructions.length > 0;
     const cookBtn = hasMethods
@@ -677,7 +700,7 @@ async function openRecipeModal(id, entryId, plannedServings) {
         <p class="modal-recipe-meta">${r.total_time || ""} ${servingsLabel} ${safeUrl(r.source_url) ? `· <a href="${safeUrl(r.source_url)}" target="_blank" rel="noopener noreferrer">${t("recipes.source")}</a>` : ""}</p>
         <div class="modal-actions">
             ${cookBtn}
-            <button class="btn btn-ghost btn-small ai-modify-toggle" id="btn-ai-modify-toggle">✨ ${t("recipes.modifyWithAI")}</button>
+            <button class="btn btn-ghost btn-small ai-modify-toggle modal-secondary-action" id="btn-ai-modify-toggle">✨ ${t("recipes.modifyWithAI")}</button>
             ${actionBtn}
         </div>
         <div class="ai-modify-panel hidden" id="ai-modify-panel">
@@ -731,6 +754,14 @@ async function openRecipeModal(id, entryId, plannedServings) {
             showEditRecipeForm(r);
         });
     }
+
+    const deleteBtn = body.querySelector("#btn-delete-recipe-modal");
+    if (deleteBtn) {
+        deleteBtn.addEventListener("click", () => deleteRecipe(r.id));
+    }
+
+    // Build the kebab menu (mobile only — surfaced via CSS)
+    setupRecipeModalKebab(body);
 
     // AI Modify toggle
     const aiToggle = body.querySelector("#btn-ai-modify-toggle");
@@ -825,6 +856,65 @@ async function openRecipeModal(id, entryId, plannedServings) {
     });
 
     show($("#recipe-modal"));
+}
+
+// Build the recipe-modal "more actions" (⋯) menu for mobile.
+// Lists every .modal-secondary-action button in the current body; each menu
+// item proxies its click to the (CSS-hidden on mobile) underlying button.
+function setupRecipeModalKebab(body) {
+    const moreBtn = $("#btn-modal-more");
+    if (!moreBtn) return;
+
+    // Close any previously-open menu so the new modal starts fresh.
+    document.querySelectorAll(".modal-more-menu").forEach((m) => m.remove());
+    moreBtn.setAttribute("aria-expanded", "false");
+
+    moreBtn.onclick = (ev) => {
+        ev.stopPropagation();
+        const existing = document.querySelector(".modal-more-menu");
+        if (existing) { existing.remove(); moreBtn.setAttribute("aria-expanded", "false"); return; }
+
+        const actions = body.querySelectorAll(".modal-secondary-action");
+        if (!actions.length) return;
+
+        const menu = document.createElement("div");
+        menu.className = "modal-more-menu";
+        menu.setAttribute("role", "menu");
+        actions.forEach((btn) => {
+            const item = document.createElement("button");
+            item.type = "button";
+            item.className = "modal-more-item";
+            item.setAttribute("role", "menuitem");
+            if (btn.classList.contains("btn-danger")) item.classList.add("is-danger");
+            item.textContent = btn.textContent.trim();
+            item.addEventListener("click", () => {
+                menu.remove();
+                moreBtn.setAttribute("aria-expanded", "false");
+                btn.click();
+            });
+            menu.appendChild(item);
+        });
+
+        // Anchor below the kebab button
+        const rect = moreBtn.getBoundingClientRect();
+        document.body.appendChild(menu);
+        menu.style.top = (rect.bottom + 4) + "px";
+        menu.style.right = (window.innerWidth - rect.right) + "px";
+        moreBtn.setAttribute("aria-expanded", "true");
+
+        const onOutside = (e) => {
+            if (!menu.contains(e.target) && e.target !== moreBtn) {
+                menu.remove();
+                moreBtn.setAttribute("aria-expanded", "false");
+                document.removeEventListener("click", onOutside, true);
+                document.removeEventListener("touchstart", onOutside, true);
+            }
+        };
+        setTimeout(() => {
+            document.addEventListener("click", onOutside, true);
+            document.addEventListener("touchstart", onOutside, true);
+        }, 0);
+    };
 }
 
 async function showEditRecipeForm(recipe) {
@@ -1391,6 +1481,7 @@ async function loadCalendarWeek() {
                                   data-entry-id="${e.id}" data-entry-type="note"
                                   data-note="${escHtml(e.note)}">
                         <span class="cal-entry-text">📝 ${escHtml(e.note)}</span>
+                        <button class="cal-entry-menu-btn" aria-label="${t("ctx.edit")}" data-entry-id="${e.id}">⋯</button>
                     </div>`;
                 } else if (!e.recipe_id) {
                     html += `<div class="cal-entry cal-entry-deleted"
@@ -1403,7 +1494,7 @@ async function loadCalendarWeek() {
                                   data-entry-id="${e.id}" data-entry-type="recipe"
                                   data-recipe-id="${e.recipe_id}" data-servings="${e.servings}">
                         <a href="#" class="cal-entry-link" data-recipe-id="${e.recipe_id}" data-entry-id="${e.id}" data-servings="${e.servings}">${escHtml(e.recipe_title)}</a>
-                        <span class="cal-entry-srv">${t("calendar.srvBadge", { n: e.servings })}</span>
+                        <button class="cal-entry-menu-btn" aria-label="${t("ctx.edit")}" data-entry-id="${e.id}">⋯</button>
                     </div>`;
                 }
             });
@@ -1495,6 +1586,7 @@ async function loadCalendarMonth() {
                                   data-entry-id="${e.id}" data-entry-type="note"
                                   data-note="${escHtml(e.note)}">
                         <span class="cal-entry-text">📝 ${escHtml(e.note)}</span>
+                        <button class="cal-entry-menu-btn" aria-label="${t("ctx.edit")}" data-entry-id="${e.id}">⋯</button>
                     </div>`;
                 } else if (!e.recipe_id) {
                     html += `<div class="cal-entry cal-entry-deleted"
@@ -1507,7 +1599,7 @@ async function loadCalendarMonth() {
                                   data-entry-id="${e.id}" data-entry-type="recipe"
                                   data-recipe-id="${e.recipe_id}" data-servings="${e.servings}">
                         <a href="#" class="cal-entry-link" data-recipe-id="${e.recipe_id}" data-entry-id="${e.id}" data-servings="${e.servings}">${escHtml(e.recipe_title)}</a>
-                        <span class="cal-entry-srv">${t("calendar.srvBadge", { n: e.servings })}</span>
+                        <button class="cal-entry-menu-btn" aria-label="${t("ctx.edit")}" data-entry-id="${e.id}">⋯</button>
                     </div>`;
                 }
             });
@@ -1563,13 +1655,19 @@ function openEntryContextMenu(entry) {
         ${copyHtml}
         <button class="ctx-action ctx-remove">🗑 ${t("ctx.remove")}</button>`;
 
-    entry.appendChild(menu);
+    // Append to body with position:fixed so the menu escapes overflow:hidden
+    // ancestors (e.g. .calendar-week-grid) that would otherwise clip it on mobile.
+    document.body.appendChild(menu);
+    const entryRect = entry.getBoundingClientRect();
+    menu.style.position = "fixed";
+    menu.style.right = (window.innerWidth - entryRect.right) + "px";
+    menu.style.top = entryRect.bottom + "px";
 
     // Flip menu upward if it overflows the viewport
     const menuRect = menu.getBoundingClientRect();
     if (menuRect.bottom > window.innerHeight) {
         menu.style.top = "auto";
-        menu.style.bottom = "100%";
+        menu.style.bottom = (window.innerHeight - entryRect.top) + "px";
     }
 
     // Servings +/- handlers
@@ -1619,7 +1717,7 @@ function openEntryContextMenu(entry) {
     }
 
     function onOutsideTouch(e) {
-        if (!entry.contains(e.target)) closeMenu();
+        if (!entry.contains(e.target) && !menu.contains(e.target)) closeMenu();
     }
 
     if (IS_TOUCH) {
@@ -1639,6 +1737,97 @@ function openEntryContextMenu(entry) {
         menu.addEventListener("mouseenter", cancelLeaveTimer);
         menu.addEventListener("mouseleave", startLeaveTimer);
     }
+}
+
+// ── Entry action sheet (mobile) ──
+function openEntryActionSheet(entry) {
+    document.querySelectorAll(".cal-action-sheet, .cal-action-sheet-backdrop").forEach(el => el.remove());
+
+    const entryId = entry.dataset.entryId;
+    const isRecipe = entry.dataset.entryType === "recipe" && !entry.classList.contains("cal-entry-deleted");
+    const isNote = entry.dataset.entryType === "note";
+    let currentServings = parseInt(entry.dataset.servings) || 2;
+    const origServings = currentServings;
+
+    const backdrop = document.createElement("div");
+    backdrop.className = "cal-action-sheet-backdrop";
+
+    const sheet = document.createElement("div");
+    sheet.className = "cal-action-sheet";
+
+    let servingsHtml = "";
+    if (isRecipe) {
+        servingsHtml = `
+            <div class="sheet-row">
+                <span class="sheet-label">${t("ctx.servings")}</span>
+                <div class="sheet-srv-picker">
+                    <button class="btn btn-secondary sheet-srv-dec" type="button">&minus;</button>
+                    <span class="sheet-srv-val">${currentServings}</span>
+                    <button class="btn btn-secondary sheet-srv-inc" type="button">+</button>
+                </div>
+            </div>
+            <div class="sheet-divider"></div>`;
+    }
+
+    let copyHtml = "";
+    if (isRecipe || isNote) {
+        copyHtml = `<button class="sheet-action sheet-copy" type="button">📋 ${t("ctx.copyTo")}</button>`;
+    }
+
+    sheet.innerHTML = `
+        ${servingsHtml}
+        ${copyHtml}
+        <button class="sheet-action sheet-remove" type="button">🗑 ${t("ctx.remove")}</button>`;
+
+    document.body.appendChild(backdrop);
+    document.body.appendChild(sheet);
+    requestAnimationFrame(() => {
+        backdrop.classList.add("open");
+        sheet.classList.add("open");
+    });
+
+    let closed = false;
+    function close(saveServings = true) {
+        if (closed) return;
+        closed = true;
+        backdrop.classList.remove("open");
+        sheet.classList.remove("open");
+        setTimeout(() => { backdrop.remove(); sheet.remove(); }, 200);
+        if (saveServings && isRecipe && currentServings !== origServings) {
+            fetch(`${API}/api/calendar/entries/${entryId}/servings`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ servings: currentServings }),
+            }).then(() => loadCalendar());
+        }
+    }
+
+    backdrop.addEventListener("click", () => close());
+
+    if (isRecipe) {
+        const valEl = sheet.querySelector(".sheet-srv-val");
+        sheet.querySelector(".sheet-srv-dec").addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            if (currentServings > 1) { currentServings--; valEl.textContent = currentServings; }
+        });
+        sheet.querySelector(".sheet-srv-inc").addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            currentServings++; valEl.textContent = currentServings;
+        });
+    }
+
+    if (isRecipe || isNote) {
+        sheet.querySelector(".sheet-copy").addEventListener("click", () => {
+            close();
+            openCopyModal(parseInt(entryId));
+        });
+    }
+
+    sheet.querySelector(".sheet-remove").addEventListener("click", async () => {
+        close(false);
+        await fetch(`${API}/api/calendar/entries/${entryId}`, { method: "DELETE" });
+        loadCalendar();
+    });
 }
 
 // ── Edit note modal ──
@@ -1699,28 +1888,20 @@ function bindCalendarEvents(grid) {
         });
     });
 
-    // Bind entry context menu — hover on desktop, long-press on touch
+    // Bind entry context menu — hover dropdown on desktop, ⋯ icon → bottom sheet on touch
     grid.querySelectorAll(".cal-entry").forEach((entry) => {
         if (!IS_TOUCH) {
             entry.addEventListener("mouseenter", () => openEntryContextMenu(entry));
             return;
         }
-        let pressTimer = null;
-        const cancel = () => {
-            if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-        };
-        entry.addEventListener("touchstart", () => {
-            cancel();
-            pressTimer = setTimeout(() => {
-                pressTimer = null;
-                entry.dataset.longPressFired = "1";
-                if (navigator.vibrate) navigator.vibrate(10);
-                openEntryContextMenu(entry);
-            }, 500);
-        }, { passive: true });
-        entry.addEventListener("touchend", cancel);
-        entry.addEventListener("touchcancel", cancel);
-        entry.addEventListener("touchmove", cancel, { passive: true });
+        const btn = entry.querySelector(".cal-entry-menu-btn");
+        if (!btn) return;
+        btn.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            if (navigator.vibrate) navigator.vibrate(5);
+            openEntryActionSheet(entry);
+        });
     });
 
     // Bind recipe links
@@ -1875,12 +2056,6 @@ $("#cal-next").addEventListener("click", () => {
     }
     loadCalendar();
 });
-$("#cal-today").addEventListener("click", () => {
-    calendarMonth = new Date();
-    calendarWeekStart = getWeekStart(new Date());
-    loadCalendar();
-});
-
 // View toggle
 $("#cal-view-week").addEventListener("click", () => {
     if (calendarViewMode === "week") return;

@@ -31,19 +31,19 @@ test.describe('Calendar entry context menu', () => {
         await expect(link).toBeVisible();
         await link.tap();
         await expect(page.locator('#recipe-modal')).not.toHaveClass(/hidden/);
-        // Context menu must NOT have opened on a simple tap
+        // Context menu / action sheet must NOT have opened on a simple tap
         await expect(page.locator('.cal-ctx-menu')).toHaveCount(0);
+        await expect(page.locator('.cal-action-sheet')).toHaveCount(0);
     });
 
-    test('mobile: long-press opens context menu', async ({ page, isMobile }) => {
+    test('mobile: tapping ⋯ icon opens action sheet', async ({ page, isMobile }) => {
         test.skip(!isMobile, 'mobile-only');
         await page.goto('/calendar');
         const entry = page.locator('.cal-entry').first();
         await expect(entry).toBeVisible();
-        await entry.dispatchEvent('touchstart');
-        // Long-press threshold in app.js is 500ms
-        await page.waitForTimeout(650);
-        await expect(page.locator('.cal-ctx-menu')).toBeVisible();
+        await entry.locator('.cal-entry-menu-btn').tap();
+        await expect(page.locator('.cal-action-sheet')).toBeVisible();
+        await expect(page.locator('.sheet-remove')).toBeVisible();
     });
 
     test('mobile: draggable attribute is stripped', async ({ page, isMobile }) => {

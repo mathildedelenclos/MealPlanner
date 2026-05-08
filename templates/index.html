@@ -15,8 +15,14 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+    <!-- ─── Mobile hamburger toggle (mobile-only via CSS) ─── -->
+    <button class="nav-hamburger" id="btn-nav-hamburger" aria-label="Menu" aria-controls="sidebar-nav" aria-expanded="false">
+        <span></span><span></span><span></span>
+    </button>
+    <div class="nav-backdrop" id="nav-backdrop"></div>
+
     <!-- ─── Sidebar Navigation ─── -->
-    <nav class="sidebar">
+    <nav class="sidebar" id="sidebar-nav">
         <div class="sidebar-header">
             <span class="logo">🍽️</span>
             <h1 data-i18n="app.title">Meal Planner</h1>
@@ -47,7 +53,6 @@
                 <button class="btn btn-ghost cal-nav-arrow" id="cal-prev">&lsaquo;</button>
                 <h3 id="cal-month-label"></h3>
                 <button class="btn btn-ghost cal-nav-arrow" id="cal-next">&rsaquo;</button>
-                <button class="btn btn-ghost btn-small cal-nav-today" id="cal-today" data-i18n="calendar.today">Today</button>
                 <div class="cal-view-toggle">
                     <button class="btn btn-small cal-view-btn active" id="cal-view-week" data-i18n="calendar.week">Week</button>
                     <button class="btn btn-small cal-view-btn" id="cal-view-month" data-i18n="calendar.month">Month</button>
@@ -260,7 +265,10 @@
         <div id="recipe-modal" class="modal hidden">
             <div class="modal-overlay"></div>
             <div class="modal-content card">
-                <button class="modal-close" id="btn-close-modal">&times;</button>
+                <div class="modal-header">
+                    <button class="modal-close" id="btn-close-modal" aria-label="Close">&times;</button>
+                    <button class="modal-more" id="btn-modal-more" aria-label="More actions" aria-haspopup="menu" aria-expanded="false">⋯</button>
+                </div>
                 <div id="modal-recipe-body"></div>
             </div>
         </div>

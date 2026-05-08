@@ -12,18 +12,22 @@ test.describe('Copy-to pick-a-slot flow', () => {
         const entry = page.locator('.cal-entry').first();
         await expect(entry).toBeVisible();
         if (isMobile) {
-            await entry.dispatchEvent('touchstart');
-            await page.waitForTimeout(650);
+            await entry.locator('.cal-entry-menu-btn').tap();
+            await expect(page.locator('.cal-action-sheet')).toBeVisible();
         } else {
             await entry.hover();
+            await expect(page.locator('.cal-ctx-menu')).toBeVisible();
         }
-        await expect(page.locator('.cal-ctx-menu')).toBeVisible();
+    }
+
+    function copySelector(isMobile) {
+        return isMobile ? '.sheet-copy' : '.ctx-copy';
     }
 
     test('copy banner appears after selecting Copy to', async ({ page, isMobile }) => {
         await page.goto('/calendar');
         await openContextMenu(page, isMobile);
-        await page.locator('.ctx-copy').click();
+        await page.locator(copySelector(isMobile)).click();
         await expect(page.locator('#copy-mode-banner')).toBeVisible();
         await expect(page.locator('#copy-mode-banner .copy-mode-msg')).toContainText(/Tap \+/i);
     });
@@ -31,7 +35,7 @@ test.describe('Copy-to pick-a-slot flow', () => {
     test('clicking + in copy mode adds a new entry and keeps banner armed', async ({ page, isMobile }) => {
         await page.goto('/calendar');
         await openContextMenu(page, isMobile);
-        await page.locator('.ctx-copy').click();
+        await page.locator(copySelector(isMobile)).click();
         await expect(page.locator('#copy-mode-banner')).toBeVisible();
 
         const entriesBefore = await page.locator('.cal-entry').count();
@@ -52,7 +56,7 @@ test.describe('Copy-to pick-a-slot flow', () => {
     test('Done button exits copy mode', async ({ page, isMobile }) => {
         await page.goto('/calendar');
         await openContextMenu(page, isMobile);
-        await page.locator('.ctx-copy').click();
+        await page.locator(copySelector(isMobile)).click();
         await expect(page.locator('#copy-mode-banner')).toBeVisible();
         await page.locator('#copy-mode-banner .copy-mode-cancel').click();
         await expect(page.locator('#copy-mode-banner')).toHaveCount(0);
@@ -61,9 +65,10 @@ test.describe('Copy-to pick-a-slot flow', () => {
     test('navigating away exits copy mode', async ({ page, isMobile }) => {
         await page.goto('/calendar');
         await openContextMenu(page, isMobile);
-        await page.locator('.ctx-copy').click();
+        await page.locator(copySelector(isMobile)).click();
         await expect(page.locator('#copy-mode-banner')).toBeVisible();
-        // Click the Recipes sidebar nav link
+        // Open the drawer first on mobile, then click the Recipes nav link
+        if (isMobile) await page.locator('#btn-nav-hamburger').tap();
         await page.locator('.nav-link[data-view="recipes"]').click();
         await expect(page.locator('#copy-mode-banner')).toHaveCount(0);
     });
