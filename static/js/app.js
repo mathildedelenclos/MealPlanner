@@ -1646,13 +1646,16 @@ function openEntryContextMenu(entry) {
     }
 
     let copyHtml = "";
+    let moveHtml = "";
     if (isRecipe || isNote) {
         copyHtml = `<button class="ctx-action ctx-copy">📋 ${t("ctx.copyTo")}</button>`;
+        moveHtml = `<button class="ctx-action ctx-move">➡️ ${t("ctx.moveTo")}</button>`;
     }
 
     menu.innerHTML = `
         ${servingsHtml}
         ${copyHtml}
+        ${moveHtml}
         <button class="ctx-action ctx-remove">🗑 ${t("ctx.remove")}</button>`;
 
     // Append to body with position:fixed so the menu escapes overflow:hidden
@@ -1683,12 +1686,17 @@ function openEntryContextMenu(entry) {
         });
     }
 
-    // Copy handler (recipes and notes)
+    // Copy / Move handlers (recipes and notes)
     if (isRecipe || isNote) {
         menu.querySelector(".ctx-copy").addEventListener("click", (e) => {
             e.stopPropagation();
             closeMenu();
             openCopyModal(parseInt(entryId));
+        });
+        menu.querySelector(".ctx-move").addEventListener("click", (e) => {
+            e.stopPropagation();
+            closeMenu();
+            enterMoveMode(parseInt(entryId));
         });
     }
 
@@ -1770,13 +1778,16 @@ function openEntryActionSheet(entry) {
     }
 
     let copyHtml = "";
+    let moveHtml = "";
     if (isRecipe || isNote) {
         copyHtml = `<button class="sheet-action sheet-copy" type="button">📋 ${t("ctx.copyTo")}</button>`;
+        moveHtml = `<button class="sheet-action sheet-move" type="button">➡️ ${t("ctx.moveTo")}</button>`;
     }
 
     sheet.innerHTML = `
         ${servingsHtml}
         ${copyHtml}
+        ${moveHtml}
         <button class="sheet-action sheet-remove" type="button">🗑 ${t("ctx.remove")}</button>`;
 
     document.body.appendChild(backdrop);
@@ -1820,6 +1831,10 @@ function openEntryActionSheet(entry) {
         sheet.querySelector(".sheet-copy").addEventListener("click", () => {
             close();
             openCopyModal(parseInt(entryId));
+        });
+        sheet.querySelector(".sheet-move").addEventListener("click", () => {
+            close();
+            enterMoveMode(parseInt(entryId));
         });
     }
 
@@ -1873,6 +1888,16 @@ function bindCalendarEvents(grid) {
     // Bind add buttons — if a copy is pending, paste the entry here; otherwise open add-meal flow
     grid.querySelectorAll(".cal-add-btn").forEach((btn) => {
         btn.addEventListener("click", async () => {
+            if (pendingMoveEntryId) {
+                await fetch(`${API}/api/calendar/entries/${pendingMoveEntryId}/move`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ entry_date: btn.dataset.day, meal_type: btn.dataset.meal }),
+                });
+                exitMoveMode();
+                loadCalendar();
+                return;
+            }
             if (pendingCopyEntryId) {
                 await fetch(`${API}/api/calendar/entries/${pendingCopyEntryId}/copy`, {
                     method: "POST",
@@ -2229,6 +2254,33 @@ function exitCopyMode() {
 
 function openCopyModal(entryId) {
     enterCopyMode(entryId);
+}
+
+// Pick-a-slot move flow: arms pendingMoveEntryId, the next + tap moves the
+// entry there and exits move mode (an entry can only live in one slot).
+let pendingMoveEntryId = null;
+
+function enterMoveMode(entryId) {
+    if (pendingCopyEntryId) exitCopyMode();
+    const existing = document.getElementById("copy-mode-banner");
+    if (existing) existing.remove();
+    pendingMoveEntryId = entryId;
+    document.body.classList.add("copy-mode");
+    const banner = document.createElement("div");
+    banner.id = "copy-mode-banner";
+    banner.className = "copy-mode-banner";
+    banner.innerHTML = `
+        <span class="copy-mode-msg">${t("move.banner")}</span>
+        <button class="copy-mode-cancel">${t("common.cancel")}</button>`;
+    document.body.appendChild(banner);
+    banner.querySelector(".copy-mode-cancel").addEventListener("click", exitMoveMode);
+}
+
+function exitMoveMode() {
+    pendingMoveEntryId = null;
+    document.body.classList.remove("copy-mode");
+    const banner = document.getElementById("copy-mode-banner");
+    if (banner) banner.remove();
 }
 
 async function openAddMealModal(day, meal) {

@@ -42,6 +42,7 @@ const TRANSLATIONS = {
     "ctx.servings": "Servings",
     "ctx.edit": "Edit",
     "ctx.copyTo": "Copy to\u2026",
+    "ctx.moveTo": "Move to\u2026",
     "ctx.remove": "Remove",
 
     // Copy modal
@@ -51,6 +52,7 @@ const TRANSLATIONS = {
     "copy.copying": "Copying\u2026",
     "copy.banner": "Tap + on the calendar to copy the recipe",
     "copy.bannerCount": "Copied to {{n}} slot(s) — tap + to copy more",
+    "move.banner": "Tap + on the calendar to move the entry",
 
     // Edit note
     "editNote.title": "Edit Note",
@@ -251,6 +253,7 @@ const TRANSLATIONS = {
     "ctx.servings": "Portions",
     "ctx.edit": "Modifier",
     "ctx.copyTo": "Copier vers\u2026",
+    "ctx.moveTo": "D\u00e9placer vers\u2026",
     "ctx.remove": "Supprimer",
 
     // Copy modal
@@ -260,6 +263,7 @@ const TRANSLATIONS = {
     "copy.copying": "Copie en cours\u2026",
     "copy.banner": "Appuyez sur + dans le calendrier pour copier la recette",
     "copy.bannerCount": "Copié vers {{n}} créneau(x) — appuyez sur + pour en ajouter",
+    "move.banner": "Appuyez sur + dans le calendrier pour déplacer l'entrée",
 
     // Edit note
     "editNote.title": "Modifier la note",
