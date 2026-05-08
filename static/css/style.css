@@ -976,6 +976,8 @@ body {
 .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 200; display: flex; align-items: center; justify-content: center; }
 .modal-overlay { position: absolute; inset: 0; background: rgba(0,0,0,.45); }
 .modal-content { position: relative; width: 600px; max-height: 80vh; overflow-y: auto; z-index: 1; }
+/* Recipe modal sits on a tinted-gray surface that picks up the calendar page bg */
+#recipe-modal .modal-content { background: #f0f1f6; }
 .modal-close {
     position: absolute;
     top: 12px; right: 16px;
@@ -1827,8 +1829,8 @@ li.category-hidden {
     position: fixed;
     inset: 0;
     z-index: 9999;
-    background: #0f172a;
-    color: #f1f5f9;
+    background: var(--bg);
+    color: var(--text);
     display: flex;
     flex-direction: column;
     animation: fadeIn .2s ease;
@@ -1840,15 +1842,15 @@ li.category-hidden {
     align-items: center;
     justify-content: space-between;
     padding: calc(12px + env(safe-area-inset-top)) 24px 12px;
-    background: #1e293b;
-    border-bottom: 1px solid #334155;
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
 }
 
 .cooking-exit {
     background: transparent;
-    color: #94a3b8;
-    border: 1px solid #475569;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
     font-size: 14px;
     padding: 8px 16px;
     border-radius: 8px;
@@ -1856,15 +1858,15 @@ li.category-hidden {
     transition: all .15s;
 }
 .cooking-exit:hover {
-    background: #ef4444;
+    background: var(--danger);
     color: #fff;
-    border-color: #ef4444;
+    border-color: var(--danger);
 }
 
 .cooking-title {
     font-size: 16px;
     font-weight: 600;
-    color: #e2e8f0;
+    color: var(--text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1880,8 +1882,8 @@ li.category-hidden {
 
 .cooking-toggle-ingredients {
     background: transparent;
-    color: #94a3b8;
-    border: 1px solid #475569;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
     font-size: 13px;
     padding: 8px 14px;
     border-radius: 8px;
@@ -1890,14 +1892,14 @@ li.category-hidden {
 }
 .cooking-toggle-ingredients:hover,
 .cooking-toggle-ingredients.active {
-    background: #3b82f6;
+    background: var(--lunch-accent);
     color: #fff;
-    border-color: #3b82f6;
+    border-color: var(--lunch-accent);
 }
 
 .cooking-wake-lock {
     font-size: 12px;
-    color: #22c55e;
+    color: var(--success);
     display: flex;
     align-items: center;
     gap: 4px;
@@ -1917,8 +1919,8 @@ li.category-hidden {
 /* Ingredients panel */
 .cooking-ingredients-panel {
     width: 320px;
-    background: #1e293b;
-    border-right: 1px solid #334155;
+    background: var(--card-bg);
+    border-right: 1px solid var(--border);
     padding: 24px;
     overflow-y: auto;
     flex-shrink: 0;
@@ -1934,7 +1936,7 @@ li.category-hidden {
     font-size: 14px;
     text-transform: uppercase;
     letter-spacing: .5px;
-    color: #94a3b8;
+    color: var(--text-muted);
     margin-bottom: 16px;
 }
 
@@ -1946,21 +1948,21 @@ li.category-hidden {
 .cooking-ingredients-panel li {
     padding: 10px 12px;
     font-size: 15px;
-    border-bottom: 1px solid #334155;
+    border-bottom: 1px solid var(--border);
     line-height: 1.5;
-    color: #e2e8f0;
+    color: var(--text);
     cursor: pointer;
     transition: background .12s;
     border-radius: 6px;
 }
 
 .cooking-ingredients-panel li:hover {
-    background: #334155;
+    background: var(--bg);
 }
 
 .cooking-ingredients-panel li.checked {
     text-decoration: line-through;
-    color: #64748b;
+    color: var(--text-muted);
 }
 
 /* Main step area */
@@ -1988,17 +1990,20 @@ li.category-hidden {
     cursor: pointer;
     transition: background .15s, border-color .15s;
     border: 2px solid transparent;
-    color: #94a3b8;
+    color: var(--text-muted);
 }
 
 .cooking-step-item:hover {
-    background: #1e293b;
+    background: var(--card-bg);
 }
 
 .cooking-step-item.active {
-    background: #1e3a5f;
-    border-color: #3b82f6;
-    color: #f8fafc;
+    background: var(--card-bg);
+    border-color: var(--lunch-accent);
+    color: var(--text);
+    padding: 22px 24px;
+    gap: 20px;
+    box-shadow: 0 2px 8px rgba(194, 114, 90, .12);
 }
 
 .cooking-step-number {
@@ -2006,25 +2011,37 @@ li.category-hidden {
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background: #334155;
-    color: #94a3b8;
+    background: var(--border);
+    color: var(--text-muted);
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: 700;
     font-size: 14px;
     margin-top: 2px;
+    transition: width .15s, height .15s, font-size .15s;
 }
 
 .cooking-step-item.active .cooking-step-number {
-    background: #3b82f6;
+    background: var(--lunch-accent);
     color: #fff;
+    width: 42px;
+    height: 42px;
+    font-size: 17px;
+    margin-top: 0;
 }
 
 .cooking-step-text {
-    font-size: 18px;
-    line-height: 1.6;
+    font-size: 17px;
+    line-height: 1.55;
     white-space: pre-line;
+    transition: font-size .15s;
+}
+
+.cooking-step-item.active .cooking-step-text {
+    font-size: 24px;
+    line-height: 1.5;
+    font-weight: 500;
 }
 
 /* Start cooking button in recipe modal */
@@ -2051,11 +2068,18 @@ li.category-hidden {
         padding: 20px 16px;
     }
     .cooking-step-text {
-        font-size: 16px;
+        font-size: 15px;
+    }
+    .cooking-step-item.active .cooking-step-text {
+        font-size: 21px;
     }
     .cooking-step-item {
         padding: 14px 16px;
         gap: 12px;
+    }
+    .cooking-step-item.active {
+        padding: 18px 18px;
+        gap: 16px;
     }
     .cooking-ingredients-panel {
         width: 260px;
@@ -2067,7 +2091,10 @@ li.category-hidden {
 
 @media (max-width: 480px) {
     .cooking-step-text {
-        font-size: 15px;
+        font-size: 14px;
+    }
+    .cooking-step-item.active .cooking-step-text {
+        font-size: 19px;
     }
     .cooking-ingredients-panel {
         position: absolute;
@@ -3145,7 +3172,9 @@ li.category-hidden {
     .chat-modal-img-wrap { height: 180px; }
 
     /* ── Recipe modal: full-screen on mobile with a back-button + kebab header ── */
-    #recipe-modal { align-items: stretch; justify-content: stretch; }
+    /* Set the bg on the wrapper too so any gap below the 100dvh content
+       (browser chrome / safe area) doesn't reveal a white html underlayer. */
+    #recipe-modal { align-items: stretch; justify-content: stretch; background: #f0f1f6; }
     #recipe-modal .modal-overlay { display: none; }
     #recipe-modal .modal-content {
         width: 100vw;
@@ -3156,19 +3185,16 @@ li.category-hidden {
         margin: 0;
         border-radius: 0;
         padding: calc(env(safe-area-inset-top) + 56px + 16px) 20px calc(env(safe-area-inset-bottom) + 24px);
-        /* Subtle warm tint so the page feels less clinical than plain white */
-        background:
-            radial-gradient(120% 60% at 0% 0%, rgba(194, 114, 90, .14), transparent 60%),
-            radial-gradient(120% 60% at 100% 100%, rgba(217, 162, 87, .10), transparent 60%),
-            #fbf3e8;
+        /* Slightly darker than the calendar page bg so the modal reads as a surface */
+        background: #f0f1f6;
     }
     #recipe-modal .modal-header {
         position: fixed;
         top: 0; left: 0; right: 0;
         height: calc(env(safe-area-inset-top) + 56px);
         padding: env(safe-area-inset-top) 8px 0;
-        /* Match the warm tint and let it blur slightly under scroll */
-        background: rgba(251, 243, 232, .92);
+        /* Match the modal background, blurred under scrolled content */
+        background: rgba(240, 241, 246, .92);
         backdrop-filter: saturate(140%) blur(8px);
         -webkit-backdrop-filter: saturate(140%) blur(8px);
         border-bottom: 1px solid var(--border);
