@@ -1263,7 +1263,12 @@ $("#photo-import-input").addEventListener("change", async (e) => {
         $("#scraped-title").textContent = data.title;
         $("#scraped-time").textContent = data.total_time || "";
         $("#scraped-servings").textContent = data.servings || "";
-        hide($("#scraped-image"));
+        if (data.image_url) {
+            $("#scraped-image").src = data.image_url;
+            show($("#scraped-image"));
+        } else {
+            hide($("#scraped-image"));
+        }
         $("#scraped-ingredients").innerHTML = (data.ingredients || [])
             .map((i) => `<li>${escHtml(i)}</li>`)
             .join("");

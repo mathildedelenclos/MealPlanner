@@ -16,6 +16,7 @@ RUN mkdir -p /data \
     && chown -R appuser:appuser /data /app
 
 ENV DATABASE_PATH=/data/mealplanner.db \
+    UPLOAD_DIR=/data/uploads \
     FLASK_ENV=production \
     PORT=5001
 

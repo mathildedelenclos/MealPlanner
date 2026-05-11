@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import socket
+import uuid
 import zipfile
 import threading
 from urllib.parse import urlparse
@@ -59,6 +60,14 @@ MAX_SCRAPE_BYTES = 5 * 1024 * 1024  # 5 MB
 
 # Single source of truth for the Gemini model.
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
+
+# Where user-uploaded recipe photos are stored. In Docker this is mounted
+# from the same persistent volume as the DB so images survive restarts.
+UPLOAD_DIR = os.environ.get(
+    "UPLOAD_DIR",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads"),
+)
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # Rate limiter: Gemini and scrape endpoints get tighter caps.
 limiter = Limiter(
@@ -288,6 +297,13 @@ def service_worker():
 @app.route("/manifest.json")
 def manifest():
     return send_from_directory("static", "manifest.json", mimetype="application/manifest+json")
+
+
+@app.route("/uploads/<path:filename>")
+def serve_upload(filename):
+    """Serve a user-uploaded recipe photo. Filenames are UUID-keyed so they
+    aren't enumerable; send_from_directory blocks any path-traversal attempts."""
+    return send_from_directory(UPLOAD_DIR, filename)
 
 
 @app.route("/favicon.ico")
@@ -911,6 +927,23 @@ def api_import_photos():
         result, error = _extract_recipe_from_photos(images, lang_key=lang_key)
         if error:
             return jsonify({"error": error}), 400
+
+        # Persist the first uploaded photo as the recipe's image so the user
+        # has something visual on the card. URL is relative so it Just Works
+        # regardless of host.
+        first_data, first_mime = images[0]
+        ext = {
+            "image/jpeg": ".jpg", "image/jpg": ".jpg", "image/png": ".png",
+            "image/webp": ".webp", "image/heic": ".heic", "image/heif": ".heif",
+        }.get(first_mime, ".jpg")
+        fname = f"{uuid.uuid4().hex}{ext}"
+        try:
+            with open(os.path.join(UPLOAD_DIR, fname), "wb") as out:
+                out.write(first_data)
+            result["image_url"] = f"/uploads/{fname}"
+        except Exception as exc:
+            log.warning("Failed to persist uploaded recipe photo: %s", exc)
+
         return jsonify(result)
     except Exception as exc:
         log.warning("Photo recipe extraction failed: %s", exc)
