@@ -1230,13 +1230,18 @@ $("#paprika-file-input").addEventListener("change", async (e) => {
     e.target.value = "";
 });
 
-// Import from photos (camera or photo library on mobile)
+// Import from photos: tap → bottom sheet → Camera (multi-shot) or Library
 $("#btn-import-photos").addEventListener("click", () => {
-    $("#photo-import-input").click();
+    openPhotoSourceSheet();
 });
 $("#photo-import-input").addEventListener("change", async (e) => {
     const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
+    e.target.value = "";
+    await uploadPhotos(files);
+});
+
+async function uploadPhotos(filesOrBlobs) {
+    if (!filesOrBlobs || filesOrBlobs.length === 0) return;
 
     hide($("#new-recipe-form"));
     hide($("#import-section"));
@@ -1246,7 +1251,11 @@ $("#photo-import-input").addEventListener("change", async (e) => {
     show($("#scrape-loading"));
 
     const formData = new FormData();
-    for (const file of files) formData.append("photos", file);
+    let idx = 0;
+    for (const f of filesOrBlobs) {
+        const name = f.name || `photo-${++idx}.jpg`;
+        formData.append("photos", f, name);
+    }
 
     try {
         const res = await fetch(`${API}/api/import-photos`, { method: "POST", body: formData });
@@ -1282,8 +1291,139 @@ $("#photo-import-input").addEventListener("change", async (e) => {
         $("#scrape-error").textContent = t("recipes.fetchError");
         show($("#scrape-error"));
     }
-    e.target.value = "";
-});
+}
+
+function openPhotoSourceSheet() {
+    document.querySelectorAll(".photo-source-sheet, .photo-source-backdrop").forEach(el => el.remove());
+
+    const backdrop = document.createElement("div");
+    backdrop.className = "cal-action-sheet-backdrop photo-source-backdrop";
+
+    const sheet = document.createElement("div");
+    sheet.className = "cal-action-sheet photo-source-sheet";
+    sheet.innerHTML = `
+        <button class="sheet-action photo-src-camera" type="button">📸 ${escHtml(t("recipes.takePhotos"))}</button>
+        <button class="sheet-action photo-src-library" type="button">🖼 ${escHtml(t("recipes.chooseFromLibrary"))}</button>
+    `;
+
+    document.body.appendChild(backdrop);
+    document.body.appendChild(sheet);
+    requestAnimationFrame(() => {
+        backdrop.classList.add("open");
+        sheet.classList.add("open");
+    });
+
+    function close() {
+        backdrop.classList.remove("open");
+        sheet.classList.remove("open");
+        setTimeout(() => { backdrop.remove(); sheet.remove(); }, 200);
+    }
+    backdrop.addEventListener("click", close);
+    sheet.querySelector(".photo-src-library").addEventListener("click", () => {
+        close();
+        $("#photo-import-input").click();
+    });
+    sheet.querySelector(".photo-src-camera").addEventListener("click", () => {
+        close();
+        openCameraModal();
+    });
+}
+
+async function openCameraModal() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert(t("recipes.cameraError"));
+        return;
+    }
+
+    const modal = document.createElement("div");
+    modal.className = "camera-modal";
+    modal.innerHTML = `
+        <div class="camera-video-wrap">
+            <video class="camera-video" autoplay playsinline muted></video>
+            <button class="camera-cancel" type="button">${escHtml(t("common.cancel"))}</button>
+            <span class="camera-count">0</span>
+        </div>
+        <div class="camera-thumbs"></div>
+        <div class="camera-controls">
+            <div class="camera-spacer"></div>
+            <button class="camera-capture" type="button" aria-label="Capture"><span class="camera-capture-inner"></span></button>
+            <button class="camera-done" type="button" disabled>${escHtml(t("common.done"))} <span class="camera-done-count">(0)</span></button>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    const video = modal.querySelector(".camera-video");
+    const thumbsEl = modal.querySelector(".camera-thumbs");
+    const countEl = modal.querySelector(".camera-count");
+    const doneBtn = modal.querySelector(".camera-done");
+    const doneCount = modal.querySelector(".camera-done-count");
+    let stream = null;
+    const captured = []; // { blob, url }
+
+    function refreshCount() {
+        countEl.textContent = String(captured.length);
+        doneCount.textContent = `(${captured.length})`;
+        doneBtn.disabled = captured.length === 0;
+    }
+    function renderThumbs() {
+        thumbsEl.innerHTML = "";
+        captured.forEach((c, i) => {
+            const wrap = document.createElement("div");
+            wrap.className = "camera-thumb";
+            wrap.innerHTML = `<img src="${c.url}" alt=""><button class="camera-thumb-del" type="button" aria-label="Remove">×</button>`;
+            wrap.querySelector(".camera-thumb-del").addEventListener("click", () => {
+                URL.revokeObjectURL(captured[i].url);
+                captured.splice(i, 1);
+                renderThumbs();
+                refreshCount();
+            });
+            thumbsEl.appendChild(wrap);
+        });
+    }
+    function stopStream() {
+        if (stream) {
+            stream.getTracks().forEach(tr => tr.stop());
+            stream = null;
+        }
+    }
+    function cleanup() {
+        stopStream();
+        captured.forEach(c => URL.revokeObjectURL(c.url));
+        modal.remove();
+    }
+
+    modal.querySelector(".camera-cancel").addEventListener("click", cleanup);
+    modal.querySelector(".camera-capture").addEventListener("click", () => {
+        if (!video.videoWidth) return;
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext("2d").drawImage(video, 0, 0);
+        canvas.toBlob((blob) => {
+            if (!blob) return;
+            captured.push({ blob, url: URL.createObjectURL(blob) });
+            renderThumbs();
+            refreshCount();
+        }, "image/jpeg", 0.92);
+    });
+    doneBtn.addEventListener("click", async () => {
+        if (captured.length === 0) return;
+        const blobs = captured.map(c => c.blob);
+        cleanup();
+        await uploadPhotos(blobs);
+    });
+
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" } },
+            audio: false,
+        });
+        video.srcObject = stream;
+    } catch (err) {
+        cleanup();
+        alert(t("recipes.cameraError"));
+    }
+}
 
 // Import from URL toggle
 $("#btn-import-url").addEventListener("click", () => {
