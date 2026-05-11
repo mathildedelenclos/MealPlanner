@@ -894,10 +894,6 @@ def api_import_photos():
             continue
         if len(data) > MAX_PHOTO_BYTES:
             return jsonify({"error": f"Image '{f.filename}' is too large (max 10 MB)"}), 400
-        # Gemini doesn't accept HEIC/HEIF directly — most browsers convert on
-        # upload, but if a raw HEIC sneaks through, surface a clear error.
-        if mime in ("image/heic", "image/heif"):
-            return jsonify({"error": "HEIC images aren't supported — please use JPEG or PNG"}), 400
         images.append((data, mime))
 
     if not images:

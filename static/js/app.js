@@ -1291,6 +1291,7 @@ $("#btn-import-url").addEventListener("click", () => {
         hide(section);
         hide($("#scrape-result"));
         hide($("#scrape-error"));
+        hide($("#scrape-loading"));
     }
 });
 
