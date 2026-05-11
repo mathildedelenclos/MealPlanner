@@ -787,6 +787,141 @@ def api_import_url():
 
 
 # ──────────────────────────────────────
+# Import from photos (camera / photo library)
+# ──────────────────────────────────────
+
+ALLOWED_PHOTO_MIME = {"image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif"}
+MAX_PHOTO_BYTES = 10 * 1024 * 1024  # 10 MB per image
+MAX_PHOTOS_PER_IMPORT = 10
+
+
+def _extract_recipe_from_photos(images, lang_key="en"):
+    """Send one or more recipe photos to Gemini and parse out a single recipe.
+
+    `images` is a list of (bytes, mime_type) tuples — all photos belong to the
+    same recipe (e.g. multiple pages of a cookbook recipe).
+    """
+    client = _get_gemini()
+    if client is None:
+        return None, "Gemini API key is required to import recipes from photos."
+
+    prompt = (
+        "The attached image(s) show a single cooking recipe — they may be photos of a "
+        "cookbook page, a handwritten recipe card, a printed sheet, or a screenshot. "
+        "If there is more than one image, treat them all as parts of the SAME recipe "
+        "(e.g. two pages of the same dish, or a page plus its ingredient list).\n\n"
+        "Read all the text in the image(s) carefully and extract the recipe. "
+        "If quantities or steps are split across pages, merge them in order.\n\n"
+        "Return ONLY a valid JSON object (no markdown fences) with this structure:\n"
+        '{"title": "...", "ingredients": ["..."], "instructions": ["step 1", "step 2", ...], '
+        '"total_time": "... min", "servings": "...", "categories": ["..."]}\n\n'
+        "Use METRIC measurements (grams, ml, °C). Keep each ingredient as one list item. "
+        "Keep each instruction step as one list item. "
+        "If you cannot find a recipe in the image(s), return: "
+        '{"error": "No recipe found in the photo(s)"}'
+    )
+
+    system = (
+        "You are a recipe extraction assistant. Extract cooking recipes from photos of "
+        "cookbook pages, recipe cards, or handwritten notes. Always use METRIC "
+        "measurements. Return only valid JSON."
+    )
+    if lang_key == "fr":
+        system += (
+            " The user speaks French. Recipe title, ingredients, and instructions "
+            "should be in French. JSON keys must remain in English."
+        )
+
+    parts = [{"text": prompt}]
+    for data, mime in images:
+        parts.append({"inline_data": {"mime_type": mime, "data": data}})
+
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=[{"role": "user", "parts": parts}],
+        config={
+            "system_instruction": system,
+            "temperature": 0.3,
+            "max_output_tokens": 4000,
+        },
+    )
+    raw = (response.text or "").strip()
+    if raw.startswith("```"):
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
+
+    parsed = json.loads(raw)
+    if "error" in parsed:
+        return None, parsed["error"]
+
+    return {
+        "title": parsed.get("title", "Untitled Recipe"),
+        "ingredients": parsed.get("ingredients", []),
+        "instructions": parsed.get("instructions", []),
+        "image_url": None,
+        "total_time": parsed.get("total_time"),
+        "servings": parsed.get("servings"),
+        "source_url": None,
+        "categories": parsed.get("categories", []),
+    }, None
+
+
+@app.route("/api/import-photos", methods=["POST"])
+@login_required_api
+@limiter.limit("30 per hour")
+def api_import_photos():
+    """Extract a recipe from one or more uploaded photos using Gemini vision.
+
+    Accepts multipart form-data with one or more files under the `photos` field.
+    Returns the same JSON shape as /api/scrape so the frontend can reuse its
+    scrape-result preview before saving.
+    """
+    files = request.files.getlist("photos")
+    if not files:
+        return jsonify({"error": "No photos provided"}), 400
+    if len(files) > MAX_PHOTOS_PER_IMPORT:
+        return jsonify({"error": f"Too many photos (max {MAX_PHOTOS_PER_IMPORT})"}), 400
+
+    images = []
+    for f in files:
+        if not f or not f.filename:
+            continue
+        mime = (f.mimetype or "").lower()
+        if mime not in ALLOWED_PHOTO_MIME:
+            return jsonify({"error": f"Unsupported image type: {mime or 'unknown'}"}), 400
+        data = f.read()
+        if not data:
+            continue
+        if len(data) > MAX_PHOTO_BYTES:
+            return jsonify({"error": f"Image '{f.filename}' is too large (max 10 MB)"}), 400
+        # Gemini doesn't accept HEIC/HEIF directly — most browsers convert on
+        # upload, but if a raw HEIC sneaks through, surface a clear error.
+        if mime in ("image/heic", "image/heif"):
+            return jsonify({"error": "HEIC images aren't supported — please use JPEG or PNG"}), 400
+        images.append((data, mime))
+
+    if not images:
+        return jsonify({"error": "No valid images in upload"}), 400
+
+    lang_key = "en"
+    try:
+        uid = session.get("user_id")
+        if uid:
+            lang_key = models.get_setting(uid, "language", "en") or "en"
+    except Exception:
+        pass
+
+    try:
+        result, error = _extract_recipe_from_photos(images, lang_key=lang_key)
+        if error:
+            return jsonify({"error": error}), 400
+        return jsonify(result)
+    except Exception as exc:
+        log.warning("Photo recipe extraction failed: %s", exc)
+        return jsonify({"error": f"Could not extract recipe from photos: {exc}"}), 400
+
+
+# ──────────────────────────────────────
 # Import Paprika
 # ──────────────────────────────────────
 

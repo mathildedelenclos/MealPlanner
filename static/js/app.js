@@ -1230,6 +1230,56 @@ $("#paprika-file-input").addEventListener("change", async (e) => {
     e.target.value = "";
 });
 
+// Import from photos (camera or photo library on mobile)
+$("#btn-import-photos").addEventListener("click", () => {
+    $("#photo-import-input").click();
+});
+$("#photo-import-input").addEventListener("change", async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    hide($("#new-recipe-form"));
+    hide($("#import-section"));
+    hide($("#scrape-result"));
+    hide($("#scrape-error"));
+    $("#scrape-loading-text").textContent = t("recipes.processingPhotos");
+    show($("#scrape-loading"));
+
+    const formData = new FormData();
+    for (const file of files) formData.append("photos", file);
+
+    try {
+        const res = await fetch(`${API}/api/import-photos`, { method: "POST", body: formData });
+        const data = await res.json();
+        hide($("#scrape-loading"));
+
+        if (data.error || !res.ok) {
+            $("#scrape-error").textContent = data.error || t("recipes.fetchError");
+            show($("#scrape-error"));
+            return;
+        }
+
+        scrapedData = data;
+        $("#scraped-title").textContent = data.title;
+        $("#scraped-time").textContent = data.total_time || "";
+        $("#scraped-servings").textContent = data.servings || "";
+        hide($("#scraped-image"));
+        $("#scraped-ingredients").innerHTML = (data.ingredients || [])
+            .map((i) => `<li>${escHtml(i)}</li>`)
+            .join("");
+        $("#scraped-instructions").innerHTML = (data.instructions || [])
+            .map((s) => `<li>${escHtml(s)}</li>`)
+            .join("");
+
+        show($("#scrape-result"));
+    } catch (err) {
+        hide($("#scrape-loading"));
+        $("#scrape-error").textContent = t("recipes.fetchError");
+        show($("#scrape-error"));
+    }
+    e.target.value = "";
+});
+
 // Import from URL toggle
 $("#btn-import-url").addEventListener("click", () => {
     hide($("#new-recipe-form"));

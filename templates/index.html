@@ -118,12 +118,14 @@
                         <div class="add-recipe-menu hidden" id="add-recipe-menu">
                             <button class="add-recipe-option" id="btn-new-recipe">✏️ <span data-i18n="recipes.manualEntry">Manual Entry</span></button>
                             <button class="add-recipe-option" id="btn-import-url">🔗 <span data-i18n="recipes.importUrl">Import from URL</span></button>
+                            <button class="add-recipe-option" id="btn-import-photos">📷 <span data-i18n="recipes.importPhotos">Import from Photos</span></button>
                             <button class="add-recipe-option" id="btn-import-file">📁 <span data-i18n="recipes.importFile">Import File</span></button>
                         </div>
                     </div>
                 </div>
             </div>
             <input type="file" id="paprika-file-input" accept=".paprikarecipes,.paprikarecipe,.xlsx,.xls" class="hidden">
+            <input type="file" id="photo-import-input" accept="image/*" capture="environment" multiple class="hidden">
 
             <!-- Recipe search + time filter + sort -->
             <div class="recipe-filter-bar">
